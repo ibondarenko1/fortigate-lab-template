@@ -72,7 +72,6 @@ values = {
     "@HOSTNAME@": hostname,
     "@MGMT_GUEST_IP@": str(mgmt_ip),
     "@MGMT_MASK@": str(mgmt.netmask),
-    "@MGMT_BRIDGE_GATEWAY@": str(bridge_ip),
     "@LAN_GUEST_IP@": str(lan_ip),
     "@LAN_MASK@": str(lan.netmask),
     "@DMZ_GUEST_IP@": str(dmz_ip),

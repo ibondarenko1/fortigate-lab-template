@@ -17,6 +17,8 @@ services:
       UUID: ${FORTIGATE_UUID:?run scripts/start.sh once to generate FORTIGATE_UUID}
       FTNT_ONBOARDING: "false"
       FORTIGATE_VERSION: ${FORTIGATE_VERSION:-7.6.8}
+      FOS_MGMT_DNS_PRIMARY: ${LAB_DNS_PRIMARY:-1.1.1.1}
+      FOS_MGMT_DNS_SECONDARY: ${LAB_DNS_SECONDARY:-9.9.9.9}
       FOS_LOG_LEVEL: WARNING
     devices:
       - /dev/kvm:/dev/kvm

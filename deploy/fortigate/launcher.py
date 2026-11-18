@@ -12,11 +12,12 @@ import os
 from pathlib import Path
 
 import common.launch as upstream_launch
-from common.launch import FeatureFileWatcher, FortiOS_vm, main
+from common.launch import CredentialsFeature, FeatureFileWatcher, FortiOS_vm, main
 
 
 ORIGINAL_INIT = FortiOS_vm.__init__
 ORIGINAL_WORK = FortiOS_vm.work
+ORIGINAL_CREDENTIAL_ACTIVATION = CredentialsFeature.activate
 PROVISIONED = Path("/state/.lab-provisioned")
 
 
@@ -93,6 +94,22 @@ def lab_work(self):
         temporary.replace(PROVISIONED)
 
 
+def activate_credentials(feature):
+    vm = feature.vm
+    current = vm.credentials
+    desired = vm.desired_credentials
+    if vm.driver._initial_login_complete and current.username == desired.username and current.password == desired.password:
+        # FortiOS already accepted the intended password at the console.
+        # Replacing it with the same password can fail and force a new login.
+        feature.commander.feature_complete(feature)
+        return
+    feature._blocks = [
+        block for block in feature._blocks if getattr(block, "value", None) != "system password-policy"
+    ]
+    ORIGINAL_CREDENTIAL_ACTIVATION(feature)
+
+
+CredentialsFeature.activate = activate_credentials
 FortiOS_vm.__init__ = lab_init
 FortiOS_vm.work = lab_work
 

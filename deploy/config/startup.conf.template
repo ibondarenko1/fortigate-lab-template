@@ -23,14 +23,6 @@ config system interface
     next
 end
 
-config router static
-    edit 1
-        set dst 0.0.0.0 0.0.0.0
-        set gateway @MGMT_BRIDGE_GATEWAY@
-        set device "port1"
-    next
-end
-
 config firewall policy
     edit 1
         set name "LAB-LAN-DMZ-HTTP"
