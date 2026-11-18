@@ -1,0 +1,106 @@
+name: ${COMPOSE_PROJECT_NAME:-fortigate_lab_template}
+
+services:
+  fortigate:
+    image: ${FORTIGATE_IMAGE:-local/fortigate-lab:7.6.8}
+    hostname: ${LAB_HOSTNAME:-fortigate-lab}
+    privileged: true
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 90s
+    mem_limit: 2560m
+    cpus: 1.50
+    working_dir: /state
+    environment:
+      CLAB_INTFS: "2"
+      CLAB_MGMT_PASSTHROUGH: "true"
+      UUID: ${FORTIGATE_UUID:?run scripts/start.sh once to generate FORTIGATE_UUID}
+      FTNT_ONBOARDING: "false"
+      FORTIGATE_VERSION: ${FORTIGATE_VERSION:-7.6.8}
+      FOS_LOG_LEVEL: WARNING
+    devices:
+      - /dev/kvm:/dev/kvm
+      - /dev/net/tun:/dev/net/tun
+    ports:
+      - 127.0.0.1:${LAB_GUI_PORT:-18843}:443
+      - 127.0.0.1:${LAB_HTTP_PORT:-18880}:80
+      - 127.0.0.1:${LAB_SSH_PORT:-18222}:22
+      - 127.0.0.1:${LAB_SERIAL_PORT:-18500}:5000
+    volumes:
+      - ./state/vm:/state
+      - ./state/startup.conf:/config/startup-config.cfg:ro
+    secrets:
+      - admin_password
+    networks:
+      management:
+        interface_name: eth0
+        gw_priority: 100
+        ipv4_address: ${LAB_MGMT_LINK_IP:-10.231.30.2}
+      lan:
+        interface_name: eth1
+        gw_priority: 0
+        ipv4_address: ${LAB_LAN_LINK_IP:-10.231.31.2}
+      dmz:
+        interface_name: eth2
+        gw_priority: 0
+        ipv4_address: ${LAB_DMZ_LINK_IP:-10.231.32.2}
+
+  client:
+    image: busybox:1.37.0-musl@sha256:f6a95d611e0a8780fabdb2aec43e31275b2720dfefa3e41b16835bfc42454478
+    hostname: lab-client
+    init: true
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    command:
+      - sh
+      - -c
+      - >-
+        ip route replace ${LAB_DMZ_CIDR:-10.231.32.0/24} via ${LAB_LAN_GUEST_IP:-10.231.31.1} &&
+        sleep 365d
+    networks:
+      lan:
+        ipv4_address: ${LAB_LAN_NODE:-10.231.31.10}
+
+  server:
+    image: busybox:1.37.0-musl@sha256:f6a95d611e0a8780fabdb2aec43e31275b2720dfefa3e41b16835bfc42454478
+    hostname: lab-server
+    init: true
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    command:
+      - sh
+      - -c
+      - >-
+        mkdir -p /www &&
+        printf 'fortigate-lab dmz service\n' > /www/index.html &&
+        ip route replace ${LAB_LAN_CIDR:-10.231.31.0/24} via ${LAB_DMZ_GUEST_IP:-10.231.32.1} &&
+        httpd -f -p 80 -h /www
+    networks:
+      dmz:
+        ipv4_address: ${LAB_DMZ_NODE:-10.231.32.10}
+
+secrets:
+  admin_password:
+    file: ./secrets/admin-password
+
+networks:
+  management:
+    internal: false
+    ipam:
+      config:
+        - subnet: ${LAB_MGMT_CIDR:-10.231.30.0/24}
+          gateway: ${LAB_MGMT_BRIDGE_GATEWAY:-10.231.30.254}
+  lan:
+    internal: true
+    ipam:
+      config:
+        - subnet: ${LAB_LAN_CIDR:-10.231.31.0/24}
+          gateway: ${LAB_LAN_BRIDGE_GATEWAY:-10.231.31.254}
+  dmz:
+    internal: true
+    ipam:
+      config:
+        - subnet: ${LAB_DMZ_CIDR:-10.231.32.0/24}
+          gateway: ${LAB_DMZ_BRIDGE_GATEWAY:-10.231.32.254}

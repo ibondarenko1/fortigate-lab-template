@@ -1,0 +1,10 @@
+.env
+.build*/
+secrets/*
+!secrets/.gitkeep
+state/*
+!state/.gitkeep
+*.qcow2
+*.qcow2.*
+*.lic
+*.license

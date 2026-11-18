@@ -1,0 +1,13 @@
+---
+all:
+  children:
+    fortigate_lab:
+      hosts:
+        lab:
+          ansible_host: 127.0.0.1
+          ansible_httpapi_port: 8443
+          ansible_httpapi_use_ssl: true
+          ansible_httpapi_validate_certs: true
+          # Use the HTTPS hostname matching your lab certificate if it is not issued for this IP.
+          # ansible_httpapi_ca_path: /absolute/path/to/ca.pem
+          fortios_vdom: root

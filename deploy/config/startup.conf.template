@@ -1,0 +1,47 @@
+config system global
+    set hostname "@HOSTNAME@"
+end
+
+config system interface
+    edit "port1"
+        set alias "LAB-MGMT"
+        set mode static
+        set ip @MGMT_GUEST_IP@ @MGMT_MASK@
+        set allowaccess ping https ssh
+    next
+    edit "port2"
+        set alias "LAB-LAN"
+        set mode static
+        set ip @LAN_GUEST_IP@ @LAN_MASK@
+        set allowaccess ping
+    next
+    edit "port3"
+        set alias "LAB-DMZ"
+        set mode static
+        set ip @DMZ_GUEST_IP@ @DMZ_MASK@
+        set allowaccess ping
+    next
+end
+
+config router static
+    edit 1
+        set dst 0.0.0.0 0.0.0.0
+        set gateway @MGMT_BRIDGE_GATEWAY@
+        set device "port1"
+    next
+end
+
+config firewall policy
+    edit 1
+        set name "LAB-LAN-DMZ-HTTP"
+        set srcintf "port2"
+        set dstintf "port3"
+        set srcaddr "all"
+        set dstaddr "all"
+        set action accept
+        set schedule "always"
+        set service "HTTP"
+        set logtraffic all
+        set nat disable
+    next
+end

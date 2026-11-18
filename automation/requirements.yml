@@ -1,0 +1,10 @@
+---
+collections:
+  - name: ansible.utils
+    version: "6.1.1"
+  - name: ansible.netcommon
+    version: "8.8.0"
+  # Fortinet's GitHub release tag 2.6.0 resolves to this commit.
+  - name: https://github.com/fortinet-ansible-dev/ansible-galaxy-fortios-collection.git
+    type: git
+    version: "5174d341626cb099a079b18276906f3f91f4a110"

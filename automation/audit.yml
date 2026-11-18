@@ -1,0 +1,55 @@
+---
+- name: Read the live FortiGate lab
+  hosts: fortigate_lab
+  gather_facts: false
+  connection: httpapi
+  vars:
+    ansible_network_os: fortinet.fortios.fortios
+    ansible_persistent_log_messages: false
+    fortios_access_token: "{{ lookup('ansible.builtin.env', 'FORTIOS_ACCESS_TOKEN') }}"
+    fortios_local_password_file: "{{ lookup('ansible.builtin.env', 'FORTIOS_LOCAL_PASSWORD_FILE') }}"
+    ansible_user: "{{ fortios_local_user | default('admin') }}"
+    ansible_password: "{{ lookup('ansible.builtin.file', fortios_local_password_file) if fortios_local_password_file | length > 0 else '' }}"
+  pre_tasks:
+    - name: Check the local lab connection settings
+      ansible.builtin.assert:
+        that:
+          - (fortios_access_token | length > 0) != (fortios_local_password_file | length > 0)
+          - (ansible_httpapi_use_ssl | default(false) | bool) or (hostvars[inventory_hostname].ansible_host == '127.0.0.1' and fortios_local_password_file | length > 0)
+          - not (ansible_httpapi_use_ssl | default(false) | bool) or (ansible_httpapi_validate_certs | default(true) | bool)
+        fail_msg: Use a trusted HTTPS endpoint with a local API token, or the existing loopback lab bridge with a local password file.
+      delegate_to: localhost
+  tasks:
+    - name: Read system status from the native FortiOS API
+      fortinet.fortios.fortios_monitor_fact:
+        selector: system_status
+        vdom: "{{ fortios_vdom | default('root') }}"
+        access_token: "{{ fortios_access_token | default(omit, true) }}"
+      register: appliance
+      no_log: true
+
+    - name: Read firewall policies from the native FortiOS API
+      fortinet.fortios.fortios_configuration_fact:
+        selector: firewall_policy
+        vdom: "{{ fortios_vdom | default('root') }}"
+        access_token: "{{ fortios_access_token | default(omit, true) }}"
+      register: policies
+      no_log: true
+
+    - name: Check that the appliance returned a live response
+      ansible.builtin.assert:
+        that:
+          - appliance.meta.status == 'success'
+          - appliance.meta.version is match('^v[0-9]+[.][0-9]+[.][0-9]+$')
+          - appliance.meta.build is defined
+          - policies.meta.status == 'success'
+          - policies.meta.results is sequence
+        quiet: true
+      delegate_to: localhost
+
+    - name: Report firmware and policy count
+      ansible.builtin.debug:
+        msg:
+          firmware: "{{ appliance.meta.version }}"
+          build: "{{ appliance.meta.build }}"
+          firewall_policies: "{{ policies.meta.results | length }}"
