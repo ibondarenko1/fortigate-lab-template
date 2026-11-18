@@ -20,7 +20,7 @@ cp -n .env.example .env
   umask 077
   mkdir -p secrets
   if [ ! -e secrets/admin-password ]; then
-    python3 -c 'import secrets; print(secrets.token_hex(20))' > secrets/admin-password
+    python3 -c 'import secrets; print(secrets.token_hex(20) + "Aa9!")' > secrets/admin-password
   fi
 )
 bash scripts/build-fortigate.sh /absolute/path/to/fortios.qcow2
@@ -48,4 +48,4 @@ docker compose exec -T client wget -T 5 -qO- http://10.231.32.10/
 
 При включённом правиле ответ содержит `fortigate-lab dmz service`. Событие доступно в **Log & Report → Forward Traffic**, если на экземпляре включено локальное логирование.
 
-Для остановки используйте `bash scripts/stop.sh`, для повторного запуска — `bash scripts/start.sh`. Эти команды используют сохранённые диски и настройки. В рабочей VM делайте резервную копию через родное меню FortiOS и храните её вне Git. Чтобы поднять чистый стенд отдельно, начните с новой копии шаблона, чистого официального диска и отдельной разрешённой активации.
+Для остановки используйте `bash scripts/stop.sh`, для повторного запуска — `bash scripts/start.sh`. Эти команды используют сохранённые диски и настройки. Если меняете пароль `admin` в FortiOS, обновите локальный файл пароля перед перезапуском. В рабочей VM делайте резервную копию через родное меню FortiOS и храните её вне Git. Чтобы поднять чистый стенд отдельно, начните с новой копии шаблона, чистого официального диска и отдельной разрешённой активации.
