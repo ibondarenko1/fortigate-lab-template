@@ -14,6 +14,7 @@ services:
     environment:
       CLAB_INTFS: "2"
       CLAB_MGMT_PASSTHROUGH: "true"
+      LAB_HOSTNAME: ${LAB_HOSTNAME:-fortigate-lab}
       UUID: ${FORTIGATE_UUID:?run scripts/start.sh once to generate FORTIGATE_UUID}
       FTNT_ONBOARDING: "false"
       FORTIGATE_VERSION: ${FORTIGATE_VERSION:-7.6.8}
@@ -78,7 +79,8 @@ services:
         mkdir -p /www &&
         printf 'fortigate-lab dmz service\n' > /www/index.html &&
         ip route replace ${LAB_LAN_CIDR:-10.231.31.0/24} via ${LAB_DMZ_GUEST_IP:-10.231.32.1} &&
-        httpd -f -p 80 -h /www
+        httpd -p 8080 -h /www &&
+        exec httpd -f -p 80 -h /www
     networks:
       dmz:
         ipv4_address: ${LAB_DMZ_NODE:-10.231.32.10}

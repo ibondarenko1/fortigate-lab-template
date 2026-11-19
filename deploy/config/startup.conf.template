@@ -23,17 +23,47 @@ config system interface
     next
 end
 
+config firewall address
+    edit "LAB-LAN-NET"
+        set subnet @LAN_NETWORK@ @LAN_MASK@
+    next
+    edit "LAB-DMZ-NET"
+        set subnet @DMZ_NETWORK@ @DMZ_MASK@
+    next
+end
+
+config firewall service custom
+    edit "LAB-HTTP-8080"
+        set tcp-portrange 8080
+    next
+end
+
 config firewall policy
     edit 1
         set name "LAB-LAN-DMZ-HTTP"
         set srcintf "port2"
         set dstintf "port3"
-        set srcaddr "all"
-        set dstaddr "all"
+        set srcaddr "LAB-LAN-NET"
+        set dstaddr "LAB-DMZ-NET"
         set action accept
         set schedule "always"
         set service "HTTP"
         set logtraffic all
         set nat disable
     next
+    edit 2
+        set name "LAB-LAN-DMZ-DENY-8080"
+        set srcintf "port2"
+        set dstintf "port3"
+        set srcaddr "LAB-LAN-NET"
+        set dstaddr "LAB-DMZ-NET"
+        set action deny
+        set schedule "always"
+        set service "LAB-HTTP-8080"
+        set logtraffic all
+    next
+end
+
+config log memory setting
+    set status enable
 end

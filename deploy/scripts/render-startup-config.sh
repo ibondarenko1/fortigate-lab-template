@@ -73,8 +73,10 @@ values = {
     "@MGMT_GUEST_IP@": str(mgmt_ip),
     "@MGMT_MASK@": str(mgmt.netmask),
     "@LAN_GUEST_IP@": str(lan_ip),
+    "@LAN_NETWORK@": str(lan.network_address),
     "@LAN_MASK@": str(lan.netmask),
     "@DMZ_GUEST_IP@": str(dmz_ip),
+    "@DMZ_NETWORK@": str(dmz.network_address),
     "@DMZ_MASK@": str(dmz.netmask),
 }
 text = pathlib.Path(template_name).read_text(encoding="utf-8")

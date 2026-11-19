@@ -32,4 +32,6 @@ jobs:
       - name: Validate the deployment configuration
         env:
           FORTIGATE_UUID: 7c3928c1-9c6f-41bd-b0da-fc464411f854
-        run: docker compose --env-file deploy/.env.example -f deploy/compose.yaml config --quiet
+        run: |
+          bash deploy/scripts/render-startup-config.sh
+          docker compose --env-file deploy/.env.example -f deploy/compose.yaml config --quiet
