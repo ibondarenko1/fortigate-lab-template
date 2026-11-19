@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A reusable FortiGate and FortiOS lab for practicing firewall policies, traffic logs, RADIUS authentication, and read-only Ansible auditing.">
+  <meta name="robots" content="index,follow">
+  <meta name="theme-color" content="#0b1324">
+  <link rel="canonical" href="https://ibondarenko1.github.io/fortigate-lab-template/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="FortiGate Lab Template">
+  <meta property="og:title" content="FortiGate Lab Template | FortiOS practice environment">
+  <meta property="og:description" content="Practice FortiOS firewall policy, forwarding logs, RADIUS authentication, and read-only Ansible auditing in a reusable open lab.">
+  <meta property="og:url" content="https://ibondarenko1.github.io/fortigate-lab-template/">
+  <meta property="og:image" content="https://ibondarenko1.github.io/fortigate-lab-template/lab-preview.png">
+  <meta property="og:image:alt" content="Native FortiOS User Definition table showing synthetic LABCO users from four departments">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="FortiGate Lab Template | FortiOS practice environment">
+  <meta name="twitter:description" content="A reusable open lab for FortiOS policy, logging, RADIUS, and Ansible practice.">
+  <meta name="twitter:image" content="https://ibondarenko1.github.io/fortigate-lab-template/lab-preview.png">
+  <meta name="twitter:image:alt" content="Native FortiOS User Definition table showing synthetic LABCO users from four departments">
+  <title>FortiGate Lab Template | FortiOS practice environment</title>
+  <link rel="stylesheet" href="site.css">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "LearningResource",
+    "name": "FortiGate Lab Template",
+    "description": "A reusable open lab for practicing FortiOS firewall policy, forwarding logs, RADIUS authentication, and read-only Ansible auditing.",
+    "url": "https://ibondarenko1.github.io/fortigate-lab-template/",
+    "image": "https://ibondarenko1.github.io/fortigate-lab-template/lab-preview.png",
+    "learningResourceType": "Hands-on network security lab",
+    "isAccessibleForFree": true,
+    "inLanguage": "en",
+    "license": "https://opensource.org/license/mit",
+    "about": ["FortiGate", "FortiOS", "FortiGate-VM", "RADIUS", "Docker", "Ansible"],
+    "sameAs": "https://github.com/ibondarenko1/fortigate-lab-template"
+  }
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <header class="site-header">
+    <div class="shell nav-wrap">
+      <a class="brand" href="./" aria-label="FortiGate Lab Template home">
+        <span class="brand-mark" aria-hidden="true">FG</span>
+        <span>FortiGate Lab Template</span>
+      </a>
+      <nav aria-label="Primary navigation">
+        <a href="#setup">Setup</a>
+        <a href="#practice">Practice</a>
+        <a href="#integrations">Integrations</a>
+        <a class="nav-github" href="https://github.com/ibondarenko1/fortigate-lab-template">View on GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main-content">
+    <section class="hero shell" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <h1 id="hero-title">A FortiGate lab for practicing FortiOS.</h1>
+        <p class="hero-lede">Trace a connection from a LAN client to a DMZ web server, find the matching policy in FortiOS, and test an employee login through FreeRADIUS. Run the lab on your own host.</p>
+        <div class="hero-actions">
+          <a class="button button-primary" href="https://github.com/ibondarenko1/fortigate-lab-template/generate">Use this template <span aria-hidden="true">↗</span></a>
+          <a class="button button-secondary" href="https://github.com/ibondarenko1/fortigate-lab-template/blob/main/deploy/README.md">Read the native guide</a>
+        </div>
+        <dl class="stats" aria-label="Lab facts">
+          <div><dt>3</dt><dd>policy exercises</dd></div>
+          <div><dt>12</dt><dd>synthetic LABCO users</dd></div>
+          <div><dt>7.6.8</dt><dd>FortiOS target</dd></div>
+        </dl>
+      </div>
+      <figure class="hero-figure">
+        <a class="image-frame" href="lab-preview.png" target="_blank" rel="noopener">
+          <img src="lab-preview.png" width="968" height="466" alt="Native FortiOS User Definition table showing synthetic LABCO users from Human Resources, Finance, Engineering, and Operations" loading="eager">
+        </a>
+        <figcaption>Native FortiOS view of the fictional LABCO directory. <a href="lab-preview.png" target="_blank" rel="noopener">Open the full-size image</a>.</figcaption>
+      </figure>
+    </section>
+
+    <section id="setup" class="section shell" aria-labelledby="setup-title">
+      <div class="section-heading">
+        <h2 id="setup-title">Choose a setup</h2>
+        <p>Select <strong>Use this template</strong> on GitHub and clone your copy. Run the commands from the repository root unless the guide names a different directory.</p>
+      </div>
+      <div class="setup-grid">
+        <article class="setup-card setup-card-native">
+          <p class="path-label">Native FortiOS path</p>
+          <h3>Run the appliance and verify real traffic.</h3>
+          <p>Run authorized FortiOS 7.6.8 for KVM in QEMU inside Docker. A practice client and a DMZ web server make policy decisions observable in the native interface and Forward Traffic logs.</p>
+          <ul>
+            <li>Linux x86-64 or WSL 2 with <code>/dev/kvm</code> and <code>/dev/net/tun</code></li>
+            <li>Docker Engine 28+ and Docker Compose 2.36+</li>
+            <li>FortiGate-VM64 for KVM from Fortinet Support and an authorized activation</li>
+          </ul>
+          <a class="button button-primary" href="https://github.com/ibondarenko1/fortigate-lab-template/blob/main/deploy/README.md">Open the deployment guide <span aria-hidden="true">↗</span></a>
+          <a class="inline-link" href="https://docs.fortinet.com/document/fortigate-private-cloud/7.6.0/kvm-administration-guide/659352/deploying-the-fortigate-vm">Fortinet KVM documentation <span aria-hidden="true">↗</span></a>
+        </article>
+        <article class="setup-card">
+          <p class="path-label">Docker worksheet</p>
+          <h3>Practice policy logic without a VM image.</h3>
+          <p>Run three focused exercises covering a scoped HTTP rule, an ordered exception, and a custom TCP service. The checker reports the expected rule and the first rule that actually matches.</p>
+          <pre><code>docker compose -p fortigate-worksheet \
+  -f training/compose.yaml up -d --build</code></pre>
+          <p class="small-copy">Open <code>http://practice.localhost:18846/training/</code> on the Docker host. This path needs Docker and the Compose plugin, and does not need a FortiOS image or Fortinet account.</p>
+          <a class="inline-link" href="https://github.com/ibondarenko1/fortigate-lab-template#try-the-worksheet">Worksheet instructions <span aria-hidden="true">→</span></a>
+        </article>
+      </div>
+    </section>
+
+    <section id="practice" class="section section-dark" aria-labelledby="practice-title">
+      <div class="shell">
+        <div class="section-heading section-heading-dark">
+          <h2 id="practice-title">What to test in FortiOS</h2>
+        </div>
+        <div class="practice-grid">
+          <article>
+            <h3>Forwarding and logs</h3>
+            <p><code>LAB-LAN-DMZ-HTTP</code> permits TCP 80. <code>LAB-LAN-DMZ-DENY-8080</code> denies TCP 8080. Run <code>bash scripts/verify-forwarding.sh</code> from <code>deploy</code>, then compare the matching events in <strong>Log &amp; Report &gt; Forward Traffic</strong>.</p>
+          </article>
+          <article>
+            <h3>LABCO company profile</h3>
+            <p>Load 12 synthetic users across four departments, six user groups, one RADIUS server, six IPv4 address objects, and three address groups into the native FortiOS tables. The profile uses LABCO-prefixed names so learners can inspect and remove its objects.</p>
+            <a class="dark-link" href="https://github.com/ibondarenko1/fortigate-lab-template#load-a-company-into-fortios">Load the company profile <span aria-hidden="true">→</span></a>
+          </article>
+          <article>
+            <h3>Read-only appliance audit</h3>
+            <p>The Ansible playbook reads the FortiOS version, build, and firewall policy count through the pinned Fortinet collection. It supports a trusted HTTPS endpoint with a local API token or the existing loopback lab bridge.</p>
+            <a class="dark-link" href="https://github.com/ibondarenko1/fortigate-lab-template/blob/main/automation/audit.yml">Audit playbook <span aria-hidden="true">→</span></a>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="integrations" class="section shell" aria-labelledby="integrations-title">
+      <div class="section-heading">
+        <h2 id="integrations-title">Integrations</h2>
+      </div>
+      <div class="integration-list">
+        <article class="integration-row">
+          <h3><span class="dot dot-teal" aria-hidden="true"></span>FortiOS native interface</h3>
+          <p>Review firewall policies, user definitions, user groups, RADIUS servers, addresses, and Forward Traffic logs in the original FortiOS UI.</p>
+          <a href="https://github.com/ibondarenko1/fortigate-lab-template/blob/main/deploy/README.md">Deployment guide</a>
+        </article>
+        <article class="integration-row">
+          <h3><span class="dot dot-amber" aria-hidden="true"></span>FreeRADIUS</h3>
+          <p>The company companion builds a local PAP fixture on the lab DMZ. Test <code>labco.radius.student</code> in FortiOS and compare accepted and rejected attempts.</p>
+          <a href="https://github.com/ibondarenko1/fortigate-lab-template/blob/main/training/radius/README.md">Fixture documentation</a>
+        </article>
+        <article class="integration-row">
+          <h3><span class="dot dot-violet" aria-hidden="true"></span>Fortinet Ansible collection</h3>
+          <p>The pinned collection in <code>automation/requirements.yml</code> provides the read-only modules used by the appliance audit.</p>
+          <a href="https://github.com/fortinet-ansible-dev/ansible-galaxy-fortios-collection">Collection source</a>
+        </article>
+        <article class="integration-row">
+          <h3><span class="dot dot-blue" aria-hidden="true"></span>Docker and GitHub Actions</h3>
+          <p>Compose runs the worksheet reproducibly. Actions run the Python tests, syntax checks, Docker configuration validation, and Ansible playbook checks.</p>
+          <a href="https://github.com/ibondarenko1/fortigate-lab-template/actions">Validation history</a>
+        </article>
+      </div>
+    </section>
+
+    <section class="section terms-section" aria-labelledby="terms-title">
+      <div class="shell terms-grid">
+        <h2 id="terms-title">License</h2>
+        <p>The original lab code and training materials are available under the <a href="https://github.com/ibondarenko1/fortigate-lab-template/blob/main/LICENSE">MIT License</a>. FortiGate, FortiOS, and VM firmware are Fortinet products supplied separately under Fortinet terms. This is an independent community training project.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="shell footer-wrap">
+      <p><strong>FortiGate Lab Template</strong></p>
+      <nav aria-label="Footer navigation">
+        <a href="https://github.com/ibondarenko1/fortigate-lab-template">GitHub</a>
+        <a href="https://github.com/ibondarenko1/fortigate-lab-template/generate">Use this template</a>
+        <a href="https://github.com/ibondarenko1/fortigate-lab-template/blob/main/README.md">README</a>
+        <a href="sitemap.xml">Sitemap</a>
+      </nav>
+    </div>
+  </footer>
+</body>
+</html>

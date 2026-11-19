@@ -2,6 +2,8 @@
 
 A hands-on lab for network administrators, students, and instructors learning FortiOS. Trace a connection from a LAN client through a FortiGate-VM to a DMZ web server, find the matching policy in the traffic log, and test an employee login against FreeRADIUS. The lab runs on your own host and uses the native FortiOS interface.
 
+See the project guide for a preview of the populated FortiOS user directory and the prerequisites for each setup. [FortiGate homelab guide](https://ibondarenko1.github.io/fortigate-lab-template/)
+
 | Start here | What you can practice | What you need |
 | --- | --- | --- |
 | Browser worksheet | Repair three FortiOS CLI configurations and check which rule matches each sample flow. | Docker and the Compose plugin |
@@ -51,7 +53,7 @@ If the browser runs on a different computer, forward both the native GUI port an
 
 ## Audit the appliance with Ansible
 
-The read-only playbook uses Fortinet's pinned `fortinet.fortios` collection to report firmware version, build, and policy count. Run it from a machine that can reach the appliance. [Pinned Fortinet collection](automation/requirements.yml) · [Audit playbook](automation/audit.yml)
+The read-only playbook uses Fortinet's `fortinet.fortios` Ansible collection to report firmware version, build, and policy count. The lab pins the upstream Git commit for release 2.6.0. Run the playbook from a machine that can reach the appliance. [Fortinet release on GitHub](https://github.com/fortinet-ansible-dev/ansible-galaxy-fortios-collection/releases/tag/2.6.0) · [Ansible Galaxy](https://galaxy.ansible.com/ui/repo/published/fortinet/fortios/) · [Pinned dependencies](automation/requirements.yml) · [Audit playbook](automation/audit.yml)
 
 ```sh
 bash automation/install.sh

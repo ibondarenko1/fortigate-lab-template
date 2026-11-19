@@ -1,0 +1,75 @@
+name: Publish the lab guide
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: lab-guide-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    # Copies of this training template run locally and do not publish the project website.
+    if: github.repository == 'ibondarenko1/fortigate-lab-template' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Add the site-scoped IndexNow verification file
+        env:
+          INDEXNOW_KEY: ${{ secrets.INDEXNOW_KEY }}
+        run: |
+          [[ "$INDEXNOW_KEY" =~ ^[a-f0-9]{40}$ ]]
+          printf '%s\n' "$INDEXNOW_KEY" > "docs/$INDEXNOW_KEY.txt"
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: docs
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.publish.outputs.page_url }}
+    outputs:
+      page_url: ${{ steps.publish.outputs.page_url }}
+    steps:
+      - name: Deploy the project website
+        id: publish
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+
+  notify:
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Notify IndexNow about the published guide
+        env:
+          PAGE_URL: ${{ needs.deploy.outputs.page_url }}
+          INDEXNOW_KEY: ${{ secrets.INDEXNOW_KEY }}
+        run: |
+          site="${PAGE_URL%/}/"
+          [[ "$site" == 'https://ibondarenko1.github.io/fortigate-lab-template/' ]]
+          key_url="${site}${INDEXNOW_KEY}.txt"
+          proof=$(curl --fail --silent --show-error --max-time 12 --retry 6 --retry-all-errors --retry-max-time 100 "$key_url")
+          [[ "$proof" == "$INDEXNOW_KEY" ]]
+          status=$(curl --silent --show-error --max-time 30 --retry 2 --output /dev/null --write-out '%{http_code}' \
+            --get 'https://api.indexnow.org/indexnow' --data-urlencode "url=$site" \
+            --data-urlencode "key=$INDEXNOW_KEY" --data-urlencode "keyLocation=$key_url")
+          echo "IndexNow returned HTTP $status for $site"
+          [[ "$status" == 200 || "$status" == 202 ]]

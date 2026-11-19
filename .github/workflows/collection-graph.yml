@@ -1,0 +1,48 @@
+name: Submit collection dependency graph
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - automation/requirements.yml
+      - .github/scripts/build-collection-snapshot.rb
+      - .github/workflows/collection-graph.yml
+  workflow_dispatch:
+
+# The published template opts into this integration. Template copies skip the
+# job and can enable their own dependency graph when they are ready.
+permissions: {}
+
+concurrency:
+  group: collection-graph-main
+  cancel-in-progress: true
+
+jobs:
+  submit:
+    if: github.repository == 'ibondarenko1/fortigate-lab-template' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out the manifest
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Build the dependency snapshot
+        env:
+          SNAPSHOT_PATH: ${{ runner.temp }}/collection-snapshot.json
+        run: ruby .github/scripts/build-collection-snapshot.rb "$SNAPSHOT_PATH"
+
+      - name: Submit the dependency snapshot
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SNAPSHOT_PATH: ${{ runner.temp }}/collection-snapshot.json
+        run: |
+          gh api \
+            --method POST \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2026-03-10' \
+            --input "$SNAPSHOT_PATH" \
+            "repos/${GITHUB_REPOSITORY}/dependency-graph/snapshots"
