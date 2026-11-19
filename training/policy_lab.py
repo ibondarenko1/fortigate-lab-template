@@ -121,9 +121,7 @@ class _Exercise:
     config: str
     starter_config: str
     task_prompt: str
-    task_prompt_ru: str
     help: str
-    help_ru: str
     cases: tuple[_Case, ...]
 
 
@@ -687,9 +685,7 @@ def _exercise(
     *,
     starter_config: str,
     task_prompt: str,
-    task_prompt_ru: str,
     help_text: str,
-    help_ru: str,
 ) -> _Exercise:
     return _Exercise(
         exercise_id=exercise_id,
@@ -698,9 +694,7 @@ def _exercise(
         config=textwrap.dedent(config).strip() + "\n",
         starter_config=textwrap.dedent(starter_config).strip() + "\n",
         task_prompt=task_prompt,
-        task_prompt_ru=task_prompt_ru,
         help=help_text,
-        help_ru=help_ru,
         cases=tuple(cases),
     )
 
@@ -961,9 +955,7 @@ _EXERCISES = (
         ),
         starter_config=_SCOPED_HTTP_STARTER_CONFIG,
         task_prompt="Add the missing explicit SSH deny for the scoped LAN client and DMZ web object.",
-        task_prompt_ru="Добавьте явный запрет SSH для заданных клиента LAN и веб-объекта DMZ.",
         help_text="Required repair: policy ID 20 named DENY-LAN-SSH, srcaddr LAN-CLIENT, dstaddr DMZ-WEB, service SSH, action deny. Do not use ALL or rely on implicit deny.",
-        help_ru="Требуемое исправление: policy ID 20 с именем DENY-LAN-SSH, srcaddr LAN-CLIENT, dstaddr DMZ-WEB, service SSH, action deny. Не используйте ALL и implicit deny.",
     ),
     _exercise(
         "ordered-exception",
@@ -1012,9 +1004,7 @@ _EXERCISES = (
         ),
         starter_config=_ORDERED_EXCEPTION_STARTER_CONFIG,
         task_prompt="Move the restricted deny before the broad LAN HTTP allow so first-match order protects the exception.",
-        task_prompt_ru="Переместите узкий запрет для restricted-хоста перед общим разрешением HTTP LAN.",
         help_text="Required order: policy ID 10 DENY-RESTRICTED-HTTP must appear before policy ID 20 ALLOW-LAN-HTTP.",
-        help_ru="Требуемый порядок: policy ID 10 DENY-RESTRICTED-HTTP должен идти перед policy ID 20 ALLOW-LAN-HTTP.",
     ),
     _exercise(
         "custom-tcp-port",
@@ -1063,29 +1053,11 @@ _EXERCISES = (
         ),
         starter_config=_CUSTOM_PORT_STARTER_CONFIG,
         task_prompt="Repair the custom TCP service so the scoped API rule allows TCP/8081 and still explicitly denies HTTP.",
-        task_prompt_ru="Исправьте собственную TCP-службу: scoped API должен разрешать TCP/8081 и явно запрещать HTTP.",
         help_text="Required service: LAB-API-TCP must use tcp-portrange 8081. Keep the exercise within the FortiOS trial limit of three firewall policies.",
-        help_ru="Требуемая служба: LAB-API-TCP должна использовать tcp-portrange 8081. В упражнении должно быть не более трех firewall policy.",
     ),
 )
 
 _EXERCISE_BY_ID = {exercise.exercise_id: exercise for exercise in _EXERCISES}
-_RUSSIAN_META = {
-    "scoped-http-allow": {
-        "title": "Ограниченное разрешение HTTP",
-        "description": "Разрешите одному клиенту LAN доступ к веб-объекту DMZ по TCP/80 и явно запретите SSH для той же пары.",
-    },
-    "ordered-exception": {
-        "title": "Приоритет исключения перед общим разрешением",
-        "description": "Сначала запретите HTTP для ограниченного узла LAN, затем разрешите HTTP для более широкой сети LAN.",
-    },
-    "custom-tcp-port": {
-        "title": "Собственная служба TCP",
-        "description": "Определите TCP-службу 8081, разрешите только ее и явно запретите обычный HTTP.",
-    },
-}
-
-
 def catalog() -> list[dict[str, Any]]:
     """Return independent, JSON-serializable exercise definitions."""
 
@@ -1095,16 +1067,12 @@ def catalog() -> list[dict[str, Any]]:
             {
                 "id": exercise.exercise_id,
                 "title": exercise.title,
-                "title_ru": _RUSSIAN_META[exercise.exercise_id]["title"],
                 "description": exercise.description,
-                "description_ru": _RUSSIAN_META[exercise.exercise_id]["description"],
                 # Public callers receive the repair starter, never the hidden
                 # reference config kept in _Exercise.config for grading/tests.
                 "config": exercise.starter_config,
                 "task_prompt": exercise.task_prompt,
-                "task_prompt_ru": exercise.task_prompt_ru,
                 "help": exercise.help,
-                "help_ru": exercise.help_ru,
                 "firewall_policy_limit": 3,
                 "supported_operations": [
                     "config firewall address / edit / set subnet / next / end",
@@ -1127,18 +1095,6 @@ def _base_result(exercise_id: str) -> dict[str, Any]:
     }
 
 
-def _case_feedback_ru(kind: str) -> str:
-    messages = {
-        "pass": "Совпали ожидаемое первое правило и его точная область действия.",
-        "parse": "Конфигурация не разобрана; сначала исправьте ошибки CLI.",
-        "implicit": "Явное правило не совпало: implicit deny не засчитывается для этого случая.",
-        "identity": "Сработало другое первое правило; проверьте порядок и более узкое исключение.",
-        "scope": "Идентификатор правила совпал, но область действия отличается; широкое правило не засчитывается.",
-        "outcome": "Первое совпавшее правило возвращает другой результат.",
-    }
-    return messages[kind]
-
-
 def grade(exercise_id: str, config_text: str) -> dict[str, Any]:
     """Grade a native CLI snippet against one finite exercise.
 
@@ -1154,9 +1110,7 @@ def grade(exercise_id: str, config_text: str) -> dict[str, Any]:
                 "code": "unknown_exercise",
                 "line": 0,
                 "message": f"Unknown exercise {exercise_id!r}.",
-                "message_ru": f"Неизвестное упражнение {exercise_id!r}.",
                 "hint": "Choose an id returned by catalog().",
-                "hint_ru": "Выберите id, возвращенный catalog().",
             }
         )
         return result
@@ -1166,9 +1120,7 @@ def grade(exercise_id: str, config_text: str) -> dict[str, Any]:
                 "code": "invalid_input",
                 "line": 0,
                 "message": "config_text must be a string containing native CLI text.",
-                "message_ru": "config_text должен быть строкой с native CLI-конфигурацией.",
                 "hint": "Pass the editable FortiOS config snippet, not a parsed object.",
-                "hint_ru": "Передайте редактируемый CLI-фрагмент, а не разобранный объект.",
             }
         )
         return result
@@ -1178,7 +1130,6 @@ def grade(exercise_id: str, config_text: str) -> dict[str, Any]:
     result["summary"]["total"] = len(exercise.cases)
     if parsed.errors:
         result["feedback"] = "Fix the configuration errors before grading traffic cases."
-        result["feedback_ru"] = _case_feedback_ru("parse")
         result["cases"] = [
             {
                 **_case_public(case),
@@ -1187,7 +1138,6 @@ def grade(exercise_id: str, config_text: str) -> dict[str, Any]:
                 "actual": None,
                 "pass": False,
                 "feedback": "Configuration parsing failed; this case was not evaluated.",
-                "feedback_ru": _case_feedback_ru("parse"),
             }
             for case in exercise.cases
         ]
@@ -1219,32 +1169,27 @@ def grade(exercise_id: str, config_text: str) -> dict[str, Any]:
         )
         if case_pass:
             feedback = "Matched the expected first rule and exact scope."
-            feedback_ru = _case_feedback_ru("pass")
         elif actual_policy is None:
             feedback = (
                 "No explicit policy matched; this is implicit default deny and "
                 "cannot satisfy an explicit-denial case."
             )
-            feedback_ru = _case_feedback_ru("implicit")
         elif not identity_pass:
             feedback = (
                 f"First matching policy is {actual_policy.policy_id} "
                 f"{actual_policy.name!r}; expected {case.expected_policy.policy_id} "
                 f"{case.expected_policy.name!r}. Check policy order and narrower exceptions."
             )
-            feedback_ru = _case_feedback_ru("identity")
         elif not scope_pass:
             feedback = (
                 "The expected rule identity matched, but its scope differs. "
                 "Do not replace the required address/service scope with a broad catch-all."
             )
-            feedback_ru = _case_feedback_ru("scope")
         else:
             feedback = (
                 f"Expected {case.expected_outcome}, but the first matching rule "
                 f"returns {actual_outcome}."
             )
-            feedback_ru = _case_feedback_ru("outcome")
         result["cases"].append(
             {
                 **_case_public(case),
@@ -1258,7 +1203,6 @@ def grade(exercise_id: str, config_text: str) -> dict[str, Any]:
                 },
                 "pass": case_pass,
                 "feedback": feedback,
-                "feedback_ru": feedback_ru,
             }
         )
 
@@ -1269,11 +1213,6 @@ def grade(exercise_id: str, config_text: str) -> dict[str, Any]:
         "All positive and explicit-negative cases passed."
         if result["pass"]
         else "At least one case failed; use each case's actionable feedback."
-    )
-    result["feedback_ru"] = (
-        "Все позитивные и явно отрицательные случаи пройдены."
-        if result["pass"]
-        else "Есть ошибки; используйте пошаговые подсказки каждого случая."
     )
     return result
 

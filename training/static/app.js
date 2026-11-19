@@ -1,8 +1,15 @@
 (function () {
   'use strict';
 
-  /* The gateway owns grading; this page edits and preserves only CLI text. */
-  var state = { exercises: [], selected: null, draft: '', loading: false, grade: null };
+  /* The local checker owns evaluation; this page edits CLI text only. */
+  var state = {
+    exercises: [], selected: null, draft: '', loading: false, grade: null,
+    company: {
+      state: 'loading',
+      counts: { users: null, groups: null, radius: null, addresses: null, address_groups: null },
+      message: 'Checking profile status.', loading: false, busy: false, lastTest: null
+    }
+  };
   var el = function (id) { return document.getElementById(id); };
   var catalogStatus = el('catalog-status');
   var exerciseList = el('exercise-list');
@@ -18,6 +25,132 @@
     pageStatus.className = 'page-status' + (tone ? ' ' + tone : '');
   }
 
+  var companyStateLabels = {
+    loading: 'Checking…', available: 'Available', applied: 'Profile loaded',
+    partial: 'Partially applied', conflict: 'Review required', unavailable: 'Unavailable'
+  };
+
+  function emptyCompanyCounts() {
+    return { users: null, groups: null, radius: null, addresses: null, address_groups: null };
+  }
+
+  function companyDefaultMessage(status) {
+    return status === 'available' ? 'The integration is available. The profile has not been loaded.'
+      : status === 'applied' ? 'The profile is loaded. Objects can be edited in the FortiOS Console.'
+      : status === 'partial' ? 'The profile is partially applied. Load it again to complete the profile.'
+      : status === 'conflict' ? 'Object conflicts were detected. Removal is blocked until you review FortiOS.'
+      : status === 'unavailable' ? 'The profile agent is unavailable; the exercise catalog remains available.'
+      : 'Checking profile status.';
+  }
+
+  function englishMessage(value, fallback) {
+    if (typeof value !== 'string' || !value || /[\u0401\u0410-\u042f\u0451\u0430-\u044f]/.test(value)) return fallback;
+    return value;
+  }
+
+  function normaliseCompany(payload) {
+    var allowed = ['available', 'applied', 'partial', 'conflict', 'unavailable'];
+    var status = payload && allowed.indexOf(payload.state) >= 0 ? payload.state : 'unavailable';
+    var source = payload && payload.counts && typeof payload.counts === 'object' ? payload.counts : {};
+    var counts = emptyCompanyCounts();
+    Object.keys(counts).forEach(function (key) {
+      var value = source[key];
+      counts[key] = typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+    });
+    var detail = payload && payload.message;
+    if (!detail && payload && payload.error && typeof payload.error.message === 'string') detail = payload.error.message;
+    if (!detail && payload && Array.isArray(payload.conflicts) && payload.conflicts.length) detail = 'Object names are already in use. Review the conflicts in the FortiOS Console.';
+    return {
+      state: status,
+      counts: counts,
+      message: englishMessage(detail, companyDefaultMessage(status)),
+      loading: false,
+      busy: false,
+      lastTest: null
+    };
+  }
+
+  function renderCompany() {
+    var company = state.company;
+    var status = company.loading ? 'loading' : company.state;
+    var stateNode = el('company-state');
+    stateNode.dataset.state = status;
+    stateNode.textContent = companyStateLabels[status] || companyStateLabels.unavailable;
+    el('company-message').textContent = company.message || companyDefaultMessage(status);
+    var countIds = { users: 'company-users', groups: 'company-groups', radius: 'company-radius', addresses: 'company-addresses', address_groups: 'company-address-groups' };
+    Object.keys(countIds).forEach(function (key) {
+      var value = company.counts && company.counts[key];
+      el(countIds[key]).textContent = typeof value === 'number' ? String(value) : '—';
+    });
+
+    var apply = el('company-apply');
+    var remove = el('company-remove');
+    var test = el('company-test');
+    var retry = el('company-retry');
+    var busy = Boolean(company.busy || company.loading);
+    el('company').setAttribute('aria-busy', busy ? 'true' : 'false');
+    var canApply = !busy && (company.state === 'available' || company.state === 'partial');
+    var canRemove = !busy && (company.state === 'applied' || company.state === 'partial');
+    var canTest = !busy && company.state === 'applied';
+    apply.disabled = !canApply;
+    remove.disabled = !canRemove;
+    test.disabled = !canTest;
+    retry.disabled = busy;
+    apply.textContent = company.state === 'partial' ? 'Complete profile' : company.state === 'applied' ? 'Profile loaded' : 'Load company profile';
+    if (company.lastTest === 'success') test.textContent = 'RADIUS reachable · test again';
+    else if (company.lastTest === 'error') test.textContent = 'Test RADIUS again';
+    else test.textContent = 'Test RADIUS';
+  }
+
+  async function loadCompany() {
+    if (state.company.busy || state.company.loading) return;
+    state.company.loading = true;
+    state.company.message = 'Checking profile status…';
+    renderCompany();
+    try {
+      state.company = normaliseCompany(await apiRequest('company'));
+    } catch (error) {
+      var unavailable = error && error.payload && error.payload.state ? normaliseCompany(error.payload) : null;
+      state.company = unavailable || {
+        state: 'unavailable', counts: emptyCompanyCounts(), loading: false, busy: false, lastTest: null,
+        message: 'The profile agent is unavailable. Exercises remain available; retry after starting the agent.'
+      };
+    }
+    renderCompany();
+  }
+
+  async function companyMutation(operation) {
+    if (state.company.busy) return;
+    if (operation === 'remove' && !window.confirm('Remove the created LABCO training profile from the training environment?')) return;
+    state.company.busy = true;
+    state.company.lastTest = null;
+    state.company.message = operation === 'apply' ? 'Loading LABCO profile…' : operation === 'remove' ? 'Removing training profile…' : 'Testing RADIUS…';
+    renderCompany();
+    try {
+      var response = await apiRequest('company/' + operation, { method: 'POST', body: '{}' });
+      if (operation === 'test') {
+        state.company.busy = false;
+        state.company.lastTest = response && response.ok ? 'success' : 'error';
+        state.company.message = englishMessage(response && response.message, response && response.ok ? 'RADIUS authentication succeeded.' : 'RADIUS authentication was not confirmed.');
+        renderCompany();
+        return;
+      }
+      /* Apply/remove may return the new company state; otherwise reconcile with GET. */
+      if (response && ['available', 'applied', 'partial', 'conflict', 'unavailable'].indexOf(response.state) >= 0) state.company = normaliseCompany(response);
+      else state.company.busy = false;
+      if (state.company.busy === false && response && response.state) renderCompany();
+      else await loadCompany();
+    } catch (error) {
+      var failedState = error && error.payload && error.payload.state ? normaliseCompany(error.payload) : null;
+      if (failedState) state.company = failedState;
+      else {
+        state.company.busy = false;
+        state.company.message = 'The operation failed. Keep the draft and retry after checking the profile agent.';
+      }
+      renderCompany();
+    }
+  }
+
   async function apiRequest(resource, options) {
     /* The worksheet is served at /training/ and its API at /training/api/. */
     var request = Object.assign({}, options || {});
@@ -26,7 +159,12 @@
     var response = await fetch('api/' + resource, request);
     var payload;
     try { payload = await response.json(); } catch (error) { payload = {}; }
-    if (!response.ok) throw new Error(payload.error || payload.detail || payload.message || ('Ошибка API (' + response.status + ')'));
+    if (!response.ok) {
+      var apiError = new Error(englishMessage(payload.error || payload.detail || payload.message, 'API request failed (' + response.status + ').'));
+      apiError.status = response.status;
+      apiError.payload = payload;
+      throw apiError;
+    }
     return payload;
   }
 
@@ -35,10 +173,10 @@
     return exercises.filter(function (item) { return item && item.id; }).map(function (item) {
       return {
         id: String(item.id),
-        title: item.title_ru || item.title || String(item.id),
-        description: item.description_ru || item.description || '',
-        taskPrompt: item.task_prompt_ru || item.task_prompt || '',
-        help: item.help_ru || item.help || '',
+        title: item.title || String(item.id),
+        description: item.description || '',
+        taskPrompt: item.task_prompt || '',
+        help: item.help || '',
         config: typeof item.config === 'string' ? item.config : item.config == null ? '' : JSON.stringify(item.config, null, 2),
         supportedOperations: Array.isArray(item.supported_operations) ? item.supported_operations : [],
         cases: Array.isArray(item.cases) ? item.cases : []
@@ -80,11 +218,11 @@
   function renderCatalog() {
     exerciseList.replaceChildren();
     if (!state.exercises.length) {
-      catalogStatus.textContent = 'Каталог пуст';
-      exerciseList.appendChild(makeElement('p', 'catalog-empty', 'В API пока нет упражнений.'));
+      catalogStatus.textContent = 'The catalog is empty';
+      exerciseList.appendChild(makeElement('p', 'catalog-empty', 'No exercises are available from the API yet.'));
       return;
     }
-    catalogStatus.textContent = state.exercises.length + ' ' + plural(state.exercises.length, 'упражнение', 'упражнения', 'упражнений');
+    catalogStatus.textContent = state.exercises.length + ' ' + (state.exercises.length === 1 ? 'exercise' : 'exercises');
     state.exercises.forEach(function (exercise, index) {
       var selected = state.selected && state.selected.id === exercise.id;
       var button = makeElement('button', 'exercise-item' + (selected ? ' selected' : ''));
@@ -94,7 +232,7 @@
       var number = makeElement('span', 'exercise-number', String(index + 1).padStart(2, '0'));
       var copy = makeElement('span', 'exercise-copy');
       copy.appendChild(makeElement('strong', '', exercise.title));
-      copy.appendChild(makeElement('small', '', exercise.description || 'Конфигурационная практика'));
+      copy.appendChild(makeElement('small', '', exercise.description || 'Configuration practice'));
       button.append(number, copy, makeElement('span', 'exercise-chevron', '›'));
       button.addEventListener('click', function () { selectExercise(exercise.id); });
       exerciseList.appendChild(button);
@@ -110,7 +248,7 @@
     renderCatalog();
     renderExercise();
     var resumed = state.draft !== initialConfig(exercise.config);
-    setStatus(resumed ? 'Восстановлен сохранённый черновик.' : '', resumed ? 'info' : '');
+    setStatus(resumed ? 'Restored saved draft.' : '', resumed ? 'info' : '');
   }
 
   function renderExercise() {
@@ -122,10 +260,10 @@
     }
     emptyView.hidden = true;
     exerciseView.hidden = false;
-    el('exercise-kicker').textContent = 'Практика · ' + exercise.id;
+    el('exercise-kicker').textContent = 'Practice · ' + exercise.id;
     el('exercise-title').textContent = exercise.title;
-    el('exercise-description').textContent = exercise.description || 'Отредактируйте CLI-конфигурацию и отправьте её на проверку.';
-    el('exercise-state').textContent = state.grade ? (state.grade.passed ? 'Проверено' : state.grade.available === false ? 'Проверка недоступна' : 'Есть замечания') : 'Черновик';
+    el('exercise-description').textContent = exercise.description || 'Edit the CLI configuration and submit it for checking.';
+    el('exercise-state').textContent = state.grade ? (state.grade.passed ? 'Checked' : state.grade.available === false ? 'Check unavailable' : 'Issues found') : 'Draft';
     renderConfigForm();
     renderBrief();
     renderGrade();
@@ -135,7 +273,7 @@
     configForm.replaceChildren();
     var wrapper = makeElement('label', 'config-field');
     wrapper.htmlFor = 'config-editor';
-    wrapper.appendChild(makeElement('span', 'field-label', 'CLI-конфигурация FortiOS'));
+    wrapper.appendChild(makeElement('span', 'field-label', 'FortiOS CLI configuration'));
     var editor = document.createElement('textarea');
     editor.id = 'config-editor';
     editor.className = 'config-editor';
@@ -147,14 +285,14 @@
     editor.addEventListener('input', function () {
       state.draft = editor.value;
       saveDraft();
-      el('draft-label').textContent = 'Черновик сохранён локально';
+      el('draft-label').textContent = 'Draft saved locally';
       if (state.grade) {
         state.grade = null;
         renderGrade();
       }
     });
     wrapper.appendChild(editor);
-    wrapper.appendChild(makeElement('small', 'field-help', 'Только учебный CLI-фрагмент: address, service custom и firewall policy. Не вставляйте сюда полный backup устройства или секреты.'));
+    wrapper.appendChild(makeElement('small', 'field-help', 'Training CLI snippet only: address, service custom, and firewall policy. Do not paste a full device backup or secrets here.'));
     configForm.appendChild(wrapper);
   }
 
@@ -164,56 +302,62 @@
     var exercise = state.selected;
     var list = makeElement('ul', 'brief-list');
     var items = [];
-    if (exercise.taskPrompt) items.push('Задача: ' + exercise.taskPrompt);
-    if (exercise.help) items.push('Критерии: ' + exercise.help);
-    items.push('Редактируйте CLI-текст; черновик сохраняется только в этом браузере.');
-    items.push('Проверка учитывает порядок первого совпавшего правила, область адресов и сервисов.');
-    if (exercise.supportedOperations.length) items.push('Поддерживаемый поднабор: ' + exercise.supportedOperations.join('; ') + '.');
-    if (exercise.cases.length) items.push('Сценариев для проверки: ' + exercise.cases.length + '.');
+    if (exercise.taskPrompt) items.push('Task: ' + exercise.taskPrompt);
+    if (exercise.help) items.push('Criteria: ' + exercise.help);
+    items.push('Edit the CLI text; the draft is saved only in this browser.');
+    items.push('The check evaluates first-match rule order, address scope, and service scope.');
+    if (exercise.supportedOperations.length) items.push('Supported subset: ' + exercise.supportedOperations.join('; ') + '.');
+    if (exercise.cases.length) items.push('Scenarios to check: ' + exercise.cases.length + '.');
     items.forEach(function (item) { list.appendChild(makeElement('li', '', item)); });
     brief.appendChild(list);
   }
 
   function outcomeLabel(value) {
-    return value === 'allowed' ? 'разрешено' : value === 'blocked' ? 'запрещено' : value === 'implicit-deny' ? 'неявный запрет' : value || '—';
+    return value === 'allowed' ? 'allowed' : value === 'blocked' ? 'blocked' : value === 'implicit-deny' ? 'implicit deny' : value || '—';
   }
 
   function identityLabel(identity) {
-    if (!identity) return 'нет явного правила';
-    var action = identity.action === 'accept' ? 'разрешение' : identity.action === 'deny' ? 'запрет' : identity.action;
-    return 'правило #' + identity.id + ' · ' + identity.name + ' · ' + action;
+    if (!identity) return 'no explicit rule';
+    var action = identity.action === 'accept' ? 'allow' : identity.action === 'deny' ? 'deny' : identity.action;
+    return 'rule #' + identity.id + ' · ' + identity.name + ' · ' + action;
+  }
+
+  function caseRuleIdentity(item, side) {
+    return item && item[side + '_' + 'rule_identity'];
   }
 
   function expectedText(item) {
     var expected = item && item.expected;
-    if (!expected) return item && item.expected_rule_identity ? identityLabel(item.expected_rule_identity) : '—';
+    var expectedIdentity = caseRuleIdentity(item, 'expected');
+    if (!expected) return expectedIdentity ? identityLabel(expectedIdentity) : '—';
     return outcomeLabel(expected.outcome) + (expected.rule_identity ? ' · ' + identityLabel(expected.rule_identity) : '');
   }
 
   function actualText(item) {
     if (!item) return '—';
-    var actual = item.actual || (item.actual_rule_identity ? { rule_identity: item.actual_rule_identity } : null);
-    if (!actual) return 'нет совпавшего правила';
+    var actualIdentity = caseRuleIdentity(item, 'actual');
+    var actual = item.actual || (actualIdentity ? { rule_identity: actualIdentity } : null);
+    if (!actual) return 'no matching rule';
     return outcomeLabel(actual.outcome) + (actual.rule_identity ? ' · ' + identityLabel(actual.rule_identity) : '');
   }
 
   function normaliseGrade(payload) {
     var rows = Array.isArray(payload && payload.cases) ? payload.cases.map(function (item, index) {
       return {
-        name: item.description || item.id || ('Сценарий ' + (index + 1)),
+        name: item.description || item.id || ('Scenario ' + (index + 1)),
         expected: expectedText(item),
         actual: actualText(item),
         pass: typeof item.pass === 'boolean' ? item.pass : undefined,
-        message: item.feedback_ru || item.feedback || '',
-        action: item.hint_ru || item.hint || item.feedback_ru || item.feedback || ''
+        message: item.feedback || '',
+        action: item.hint || item.feedback || ''
       };
     }) : [];
     var errors = Array.isArray(payload && payload.errors) ? payload.errors.map(function (item) {
-      var line = item.line ? ' · строка ' + item.line : '';
+      var line = item.line ? ' · line ' + item.line : '';
       return {
-        name: (item.code || 'Ошибка') + line,
-        message: item.message_ru || item.message || 'Конфигурация не прошла разбор.',
-        action: item.hint_ru || item.hint || 'Исправьте CLI-синтаксис и повторите проверку.'
+        name: (item.code || 'Error') + line,
+        message: item.message || 'The configuration could not be parsed.',
+        action: item.hint || 'Fix the CLI syntax and run the check again.'
       };
     }) : [];
     var summary = payload && payload.summary;
@@ -223,7 +367,7 @@
       rows: rows,
       errors: errors,
       score: summary && summary.total !== undefined ? String(summary.passed || 0) + '/' + String(summary.total) : '',
-      message: payload && (payload.feedback_ru || payload.feedback || payload.message_ru || payload.message) || ''
+      message: payload && (payload.feedback || payload.message) || ''
     };
   }
 
@@ -234,10 +378,10 @@
     }
     resultCard.hidden = false;
     var grade = state.grade;
-    el('exercise-state').textContent = grade.passed ? 'Проверено' : grade.available === false ? 'Проверка недоступна' : 'Есть замечания';
-    el('result-summary').textContent = grade.score || (grade.available === false ? 'недоступно' : grade.passed ? 'PASS' : 'REVIEW');
+    el('exercise-state').textContent = grade.passed ? 'Checked' : grade.available === false ? 'Check unavailable' : 'Issues found';
+    el('result-summary').textContent = grade.score || (grade.available === false ? 'unavailable' : grade.passed ? 'PASS' : 'REVIEW');
     el('result-summary').className = 'result-summary ' + (grade.passed ? 'pass' : grade.available === false ? 'unknown' : 'fail');
-    el('result-message').textContent = grade.message || (grade.passed ? 'Все доступные проверки пройдены.' : 'Исправьте строки с замечаниями и отправьте конфигурацию снова.');
+    el('result-message').textContent = grade.message || (grade.passed ? 'All available checks passed.' : 'Fix the flagged lines and submit the configuration again.');
     var errors = el('result-errors');
     errors.replaceChildren();
     grade.errors.forEach(function (item) {
@@ -251,13 +395,13 @@
       var line = makeElement('div', 'error-line');
       line.appendChild(makeElement('span', 'error-bullet', '!'));
       line.appendChild(makeElement('strong', '', row.name));
-      line.appendChild(makeElement('span', '', row.action || row.message || 'Сверьте ожидаемое и фактическое значение.'));
+      line.appendChild(makeElement('span', '', row.action || row.message || 'Compare the expected and actual values.'));
       errors.appendChild(line);
     });
     comparisonBody.replaceChildren();
     if (!grade.rows.length) {
       var empty = document.createElement('tr');
-      var cell = makeElement('td', 'comparison-empty', grade.available === false ? 'Учебный API недоступен. Черновик сохранён; повторите проверку после восстановления сервиса.' : 'API не вернул строки проверки.');
+      var cell = makeElement('td', 'comparison-empty', grade.available === false ? 'Training API unavailable. Draft preserved; retry after the service is restored.' : 'API returned no check rows.');
       cell.colSpan = 4;
       empty.appendChild(cell);
       comparisonBody.appendChild(empty);
@@ -270,7 +414,7 @@
       tr.appendChild(makeElement('td', 'value-cell', row.expected || '—'));
       tr.appendChild(makeElement('td', 'value-cell', row.actual || '—'));
       var status = makeElement('td', 'status-cell');
-      status.appendChild(makeElement('span', 'check-status ' + (row.pass === true ? 'pass' : row.pass === false ? 'fail' : 'unknown'), row.pass === true ? 'OK' : row.pass === false ? 'Исправить' : '—'));
+      status.appendChild(makeElement('span', 'check-status ' + (row.pass === true ? 'pass' : row.pass === false ? 'fail' : 'unknown'), row.pass === true ? 'OK' : row.pass === false ? 'Fix' : '—'));
       tr.appendChild(status);
       comparisonBody.appendChild(tr);
     });
@@ -280,31 +424,31 @@
     if (!state.selected) return;
     var button = el('grade-config');
     button.disabled = true;
-    button.textContent = 'Проверка…';
-    setStatus('Конфигурация отправляется на проверку…', 'info');
+    button.textContent = 'Checking...';
+    setStatus('Configuration is being sent for checking...', 'info');
     try {
       var payload = await apiRequest('grade', { method: 'POST', body: JSON.stringify({ exercise_id: state.selected.id, config: state.draft }) });
       state.grade = normaliseGrade(payload);
-      setStatus(state.grade.passed ? 'Проверка завершена: конфигурация принята.' : 'Проверка завершена: есть строки для исправления.', state.grade.passed ? 'success' : 'warning');
+      setStatus(state.grade.passed ? 'Check completed: configuration accepted.' : 'Check completed: some lines need fixes.', state.grade.passed ? 'success' : 'warning');
     } catch (error) {
-      state.grade = { available: false, passed: false, rows: [], errors: [], score: '', message: 'Учебный API недоступен. Черновик сохранён; повторите попытку после восстановления сервиса.' };
-      setStatus('Учебный API недоступен. Черновик сохранён; повторите проверку позже.', 'error');
+      state.grade = { available: false, passed: false, rows: [], errors: [], score: '', message: 'Training API unavailable. Draft preserved; retry after the service is restored.' };
+      setStatus('Training API unavailable. Draft preserved; retry the check later.', 'error');
     } finally {
       button.disabled = false;
-      button.textContent = 'Проверить конфигурацию';
+      button.textContent = 'Check configuration';
       renderGrade();
     }
   }
 
   function resetDraft() {
-    if (!state.selected || !window.confirm('Удалить локальный черновик этого упражнения и вернуть исходную конфигурацию?')) return;
+    if (!state.selected || !window.confirm("Remove this exercise's local draft and restore the starter configuration?")) return;
     state.draft = initialConfig(state.selected.config);
     state.grade = null;
     try { localStorage.removeItem(draftKey(state.selected)); } catch (error) { /* ignore storage restrictions */ }
     renderConfigForm();
     renderGrade();
-    el('draft-label').textContent = 'Автосохранение включено';
-    setStatus('Черновик сброшен.', 'info');
+    el('draft-label').textContent = 'Autosave enabled';
+    setStatus('Draft reset.', 'info');
   }
 
   function downloadConfig() {
@@ -319,13 +463,13 @@
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
-    setStatus('Файл конфигурации скачан.', 'success');
+    setStatus('Configuration file downloaded.', 'success');
   }
 
   async function loadCatalog() {
     if (state.loading) return;
     state.loading = true;
-    catalogStatus.textContent = 'Загрузка каталога…';
+    catalogStatus.textContent = 'Loading exercise catalog...';
     var previousId = state.selected && state.selected.id;
     try {
       var payload = await apiRequest('catalog');
@@ -340,16 +484,22 @@
       state.selected = null;
       renderCatalog();
       renderExercise();
-      catalogStatus.textContent = 'API недоступен';
-      setStatus('Не удалось загрузить каталог. Проверьте локальный учебный сервис и повторите попытку.', 'error');
+      catalogStatus.textContent = 'API unavailable';
+      setStatus('Could not load the catalog. Check the local training service and try again.', 'error');
     } finally {
       state.loading = false;
     }
   }
 
+  el('company-apply').addEventListener('click', function () { companyMutation('apply'); });
+  el('company-remove').addEventListener('click', function () { companyMutation('remove'); });
+  el('company-test').addEventListener('click', function () { companyMutation('test'); });
+  el('company-retry').addEventListener('click', loadCompany);
   el('grade-config').addEventListener('click', grade);
   el('reset-draft').addEventListener('click', resetDraft);
   el('download-config').addEventListener('click', downloadConfig);
   el('reload-catalog').addEventListener('click', loadCatalog);
+  renderCompany();
+  loadCompany();
   loadCatalog();
 }());

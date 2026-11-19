@@ -1,0 +1,58 @@
+services:
+  worksheet:
+    volumes:
+      - company-socket:/run/company:ro
+  company-agent:
+    build:
+      context: .
+      dockerfile: company.Dockerfile
+    restart: unless-stopped
+    user: "0:65534"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    environment:
+      NATIVE_IP: ${NATIVE_IP:?set the practice VM management IP}
+      NATIVE_HOSTNAME: ${NATIVE_HOSTNAME:?set the practice hostname}
+      RADIUS_IP: ${RADIUS_IP:?set an unused practice DMZ IP}
+      RADIUS_CLIENT_IP: ${RADIUS_CLIENT_IP:?set the practice VM DMZ IP}
+      LAB_LAN_CIDR: ${LAB_LAN_CIDR:?}
+      LAB_DMZ_CIDR: ${LAB_DMZ_CIDR:?}
+      LAB_LAN_NODE: ${LAB_LAN_NODE:?}
+      LAB_DMZ_NODE: ${LAB_DMZ_NODE:?}
+    volumes:
+      - company-socket:/run/company
+      - company-state:/state
+      - ${NATIVE_PASSWORD_FILE:?}:/run/secrets/native_password:ro
+      - ${NATIVE_CERT_FILE:?}:/run/secrets/native_cert:ro
+      - ${COMPANY_SECRET_DIR:?}/radius_shared:/run/secrets/radius_shared:ro
+      - ${COMPANY_SECRET_DIR:?}/radius_password:/run/secrets/radius_password:ro
+    networks: [practice-management]
+  company-radius:
+    build: ./radius
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETUID, SETGID]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 96
+    tmpfs: [/run/radius:mode=0700, /tmp]
+    environment:
+      RADIUS_CLIENT_IP: ${RADIUS_CLIENT_IP:?}
+    volumes:
+      - ${COMPANY_SECRET_DIR:?}/radius_shared:/run/secrets/radius_shared:ro
+      - ${COMPANY_SECRET_DIR:?}/radius_password:/run/secrets/radius_password:ro
+    networks:
+      practice-dmz:
+        ipv4_address: ${RADIUS_IP:?}
+networks:
+  practice-management:
+    external: true
+    name: ${PRACTICE_MGMT_NETWORK:?}
+  practice-dmz:
+    external: true
+    name: ${PRACTICE_DMZ_NETWORK:?}
+volumes:
+  company-state:
+  company-socket:

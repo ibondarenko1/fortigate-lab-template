@@ -12,11 +12,21 @@ def test_catalog_has_three_standalone_exercises_and_json_safe_cases():
     ]
     assert all(exercise["config"].strip() for exercise in exercises)
     assert all(len(exercise["cases"]) == 2 for exercise in exercises)
-    assert all(exercise["title_ru"] for exercise in exercises)
-    assert all(exercise["task_prompt_ru"] for exercise in exercises)
-    assert all(exercise["help_ru"] for exercise in exercises)
+    assert all(exercise["title"] for exercise in exercises)
+    assert all(exercise["description"] for exercise in exercises)
+    assert all(exercise["task_prompt"] for exercise in exercises)
+    assert all(exercise["help"] for exercise in exercises)
     assert all(exercise["firewall_policy_limit"] == 3 for exercise in exercises)
     json.dumps(exercises)
+
+    def contains_russian(value):
+        if isinstance(value, dict):
+            return any(contains_russian(key) or contains_russian(item) for key, item in value.items())
+        if isinstance(value, (list, tuple)):
+            return any(contains_russian(item) for item in value)
+        return isinstance(value, str) and any("\u0400" <= char <= "\u052f" for char in value)
+
+    assert not contains_russian(exercises)
 
 
 def test_reference_configs_pass_and_public_starters_are_real_repairs():

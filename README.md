@@ -1,53 +1,75 @@
 # FortiGate Lab Template
 
-Шаблон для настоящего FortiGate-VM. Конфигурация, политики, логи и дашборд открываются в штатном FortiOS. Репозиторий содержит развёртывание, локальный доступ и автоматизацию производителя. Образ FortiOS предоставляется владельцем через Fortinet Support и хранится на машине лаборатории.
+A hands-on lab for network administrators, students, and instructors learning FortiOS. Trace a connection from a LAN client through a FortiGate-VM to a DMZ web server, find the matching policy in the traffic log, and test an employee login against FreeRADIUS. The lab runs on your own host and uses the native FortiOS interface.
 
-При новом развёртывании нативная страница входа по умолчанию открывается на `https://127.0.0.1:18843/` на хосте VM. В [отдельном учебном стенде](deploy/README.md) есть адресные объекты LAN и DMZ, правила с разрешением и запретом и проверка трафика между двумя контейнерами.
+| Start here | What you can practice | What you need |
+| --- | --- | --- |
+| Browser worksheet | Repair three FortiOS CLI configurations and check which rule matches each sample flow. | Docker and the Compose plugin |
+| Native firewall lab | Edit policies in FortiOS, send real traffic, and inspect Forward Traffic logs. | A KVM-capable Linux or WSL 2 host, an authorized FortiOS 7.6.8 KVM image, and an activated VM |
+| Company profile | Explore a populated directory, inspect department membership, and authenticate a test user through FortiGate. | The native lab and its company-profile service |
 
-## Учебные задания рядом с FortiOS
+## Try the worksheet
 
-Запустите второе приложение из корня клона. Переменная `NATIVE_GUI_URL` содержит адрес оригинальной VM **со стороны браузера**.
+Select **Use this template** on GitHub, clone your copy, and run the following command from the repository root. [Create a repository from this template](https://github.com/ibondarenko1/fortigate-lab-template/generate)
 
 ```sh
-NATIVE_GUI_URL=https://127.0.0.1:18843/ docker compose -p fortigate-worksheet -f training/compose.yaml up -d --build
+docker compose -p fortigate-worksheet -f training/compose.yaml up -d --build
 ```
 
-Откройте `http://practice.localhost:18846/`, чтобы перейти в штатный FortiOS. По адресу `http://practice.localhost:18846/training/` открывается отдельная рабочая тетрадь. Для удалённого Docker-хоста пробросьте также порт 18846 через SSH. При размещении нескольких стендов задайте каждому свой `WORKSHEET_PORT` и своё имя Compose-проекта.
+Open [the local worksheet](http://practice.localhost:18846/training/). Choose an exercise, edit its CLI configuration, and select **Check configuration**. The three exercises cover a host-specific HTTP rule, an exception shadowed by a broader rule, and a custom TCP service with the wrong port. Each check shows the expected rule and the rule that actually matched. Drafts stay in your browser. This mode works without a FortiOS image or account.
 
-Три задания охватывают разрешение HTTP для заданных узлов, порядок правил и пользовательский TCP-сервис. Исправьте предложенный фрагмент FortiOS CLI и нажмите **Проверить конфигурацию**. Для каждого потока тетрадь показывает ожидаемое и фактическое правило. Черновики сохраняются в браузере. В тетрадь вставляйте только учебный фрагмент. Она оценивает поддерживаемые команды локально. Практическая проверка на устройстве выполняется отдельно через штатные правила FortiOS, учебный клиент и Forward Traffic.
+## Run the native FortiGate lab
 
-## Подключить существующую лабораторию
+Follow the deployment guide to build the appliance from your own Fortinet KVM image, start the two test hosts, and activate the VM. The default FortiOS sign-in address on the Docker host is `https://127.0.0.1:18843/`. The guide also covers access from a separate browser PC over SSH. [Deployment guide](deploy/README.md) · [Fortinet VM evaluation terms and limits](https://docs.fortinet.com/document/fortigate/7.6.6/administration-guide/441460/permanent-trial-mode-for-fortigate-vm)
 
-Откройте её обычный адрес FortiGate через локальный SSH-туннель. Пример для лаборатории, где уже работает локальный мост входа:
+For a first exercise, open **Policy & Objects → Firewall Policy** and find `LAB-LAN-DMZ-HTTP` and `LAB-LAN-DMZ-DENY-8080`. Run the traffic check from the repository root.
 
-```powershell
-.\scripts\Open-NativeFortiGate.ps1 -SshHost my-lab-host -LocalPort 18787 -RemotePort 8787 -ExistingLabBridge
-python scripts/check-native.py --port 18787
+```sh
+bash deploy/scripts/verify-forwarding.sh
 ```
 
-Проверка открывает штатный `/system/dashboard/1` и читает версию из REST API тем же локальным маршрутом. Для нового стенда используйте проброс HTTPS и обычный вход FortiOS. Параметр `-ExistingLabBridge` предназначен для уже настроенного моста `/_lab/open`.
+Both ports have a listener on the DMZ server. The LAN client should reach TCP 80 and be denied on TCP 8080. In **Log & Report → Forward Traffic**, look for policy IDs 1 and 2 and compare their actions.
 
-## Подключить Fortinet к репозиторию
+## Load a company into FortiOS
 
-В `automation/requirements.yml` закреплена коллекция **fortinet.fortios 2.6.0** по коммиту из GitHub Fortinet. Playbook `automation/audit.yml` штатными модулями производителя получает версию устройства и количество действующих записей в таблице политик. Он выполняется рядом со стендом. [Исходная коллекция Fortinet](https://github.com/fortinet-ansible-dev/ansible-galaxy-fortios-collection/tree/5174d341626cb099a079b18276906f3f91f4a110)
+**LABCO** is a fictional company with 12 local users across HR, Finance, Engineering, and Operations. Its profile adds six user groups, one RADIUS server, six IPv4 address objects, and three address groups. The objects appear in the native FortiOS tables and can be edited there.
 
-```bash
+On the Docker host, connect the worksheet to your running appliance. Supply the active deployment directory, an unused IP on its DMZ, and the verified public HTTPS certificate for that VM in PEM format. The certificate must cover the appliance management IP. The following example uses the default DMZ subnet.
+
+```sh
+NATIVE_GUI_URL=https://127.0.0.1:18843/ WORKSHEET_PROJECT=fortigate-worksheet \
+  bash training/start-company.sh "$PWD/deploy" 10.231.32.30 /path/to/verified-fortigate-gui.pem
+```
+
+1. Open **Company Infrastructure** in the worksheet and select **Load company profile**. [Open the local company profile](http://practice.localhost:18846/training/#company)
+2. Open **User Groups** in FortiOS and inspect `LABCO-GRP-FIN` to see its three members.
+3. Select **Test RADIUS** in the worksheet. FortiGate authenticates `labco.radius.student` against the FreeRADIUS service on the lab DMZ. The fixture guide also covers testing a wrong password in FortiOS. [RADIUS fixture guide](training/radius/README.md)
+
+**Remove profile** removes the objects created by the preset, including edits you made to those objects. Remove references from any policies you created before clearing the profile. The two starter firewall policies belong to the base lab.
+
+If the browser runs on a different computer, forward both the native GUI port and worksheet port 18846. Set `NATIVE_GUI_URL` to the address reachable from that browser. Existing deployments that provide a local sign-in bridge can use the Windows tunnel helper. [Windows access helper](scripts/Open-NativeFortiGate.ps1)
+
+## Audit the appliance with Ansible
+
+The read-only playbook uses Fortinet's pinned `fortinet.fortios` collection to report firmware version, build, and policy count. Run it from a machine that can reach the appliance. [Pinned Fortinet collection](automation/requirements.yml) · [Audit playbook](automation/audit.yml)
+
+```sh
 bash automation/install.sh
 source .venv/bin/activate
 cd automation
 cp inventory.example.yml inventory.local.yml
 ```
 
-В локальном inventory укажите адрес лабораторного FortiOS по HTTPS. Используйте имя из его сертификата и доверенный CA. Для автоматизации подготовьте на устройстве API-администратора с правами чтения и ограничением Trusted Hosts. Передайте его токен в переменной `FORTIOS_ACCESS_TOKEN` локального процесса. [Документация Fortinet по REST API](https://docs.fortinet.com/document/fortigate/7.6.6/administration-guide/940602/using-apis)
+Set the HTTPS host and port in `inventory.local.yml`, configure trust for the appliance certificate, and supply a read-only API administrator token through the local `FORTIOS_ACCESS_TOKEN` environment variable. Run the playbook with that inventory.
 
-```bash
+```sh
 ANSIBLE_CONFIG="$PWD/ansible.cfg" ansible-playbook -i inventory.local.yml audit.yml
 ```
 
-Если на хосте уже настроен и проверен локальный мост для этой VM, `bash audit-loopback.sh PORT /path/to/local-password-file` использует существующий файл учётных данных на этом хосте. Playbook выводит только версию, билд и число политик. Файл и токен хранятся локально. GitHub Actions устанавливает закреплённую коллекцию и проверяет синтаксис. Сам FortiGate опрашивается с локальной машины.
+For a lab with an existing loopback authentication bridge, the alternative is `bash audit-loopback.sh PORT /path/to/local-password-file` from the `automation` directory. Keep inventories and credentials local.
 
-## Развернуть отдельный стенд
+## License
 
-В GitHub выберите **Use this template**, затем следуйте [инструкции по развёртыванию](deploy/README.md). В ней описаны подготовка официального KVM-образа, отдельные сети, запуск, вход в FortiOS и применение стартовой конфигурации. [Fortinet KVM Deployment Guide](https://docs.fortinet.com/document/fortigate-private-cloud/7.6.0/kvm-administration-guide/659352/deploying-the-fortigate-vm)
+The original lab code and training materials are available under the MIT License. FortiOS firmware is supplied separately by Fortinet under its own terms. Third-party dependencies retain their respective licenses. [MIT License](LICENSE)
 
-FortiOS проверяет лицензию самостоятельно. Для бесплатной лаборатории используется официальная evaluation-лицензия в её штатных пределах. Новому экземпляру требуется собственная разрешённая активация.
+This is an independent training project. FortiGate and FortiOS are Fortinet products.

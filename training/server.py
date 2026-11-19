@@ -3,10 +3,11 @@
 import argparse
 import json
 import os
+import socket
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 from policy_lab import catalog, grade
 
@@ -19,6 +20,11 @@ ASSETS = {
 }
 MAX_BODY = 256 * 1024
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1", "practice.localhost"}
+NATIVE_PAGES = {
+    "/training/native/users": "/user/local",
+    "/training/native/groups": "/user/group",
+    "/training/native/radius": "/user/radius",
+}
 
 
 def native_url(raw):
@@ -54,6 +60,18 @@ class Worksheet(BaseHTTPRequestHandler):
     def json(self, code, payload):
         self.send_bytes(code, json.dumps(payload, ensure_ascii=False).encode(), "application/json; charset=utf-8")
 
+    def company(self, action):
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+                sock.settimeout(120)
+                sock.connect("/run/company/agent.sock")
+                sock.sendall(action.encode("ascii") + b"\n")
+                with sock.makefile("rb") as stream:
+                    response = json.loads(stream.readline(65536))
+            self.json(response["code"], response["result"])
+        except (AttributeError, OSError, ValueError, KeyError):
+            self.json(503, {"state": "unavailable", "message": "The company profile agent is unavailable."})
+
     def allowed_host(self):
         host = self.headers.get("Host", "")
         try:
@@ -62,7 +80,7 @@ class Worksheet(BaseHTTPRequestHandler):
                 return True
         except ValueError:
             pass
-        self.json(403, {"error": "Откройте локальный адрес тренажёра."})
+        self.json(403, {"error": "Open the local training host."})
         return False
 
     def do_GET(self):
@@ -71,10 +89,15 @@ class Worksheet(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path in {"/", "/_lab/open"}:
             self.send_bytes(303, location=self.server.native)
+        elif path in NATIVE_PAGES:
+            native = urlsplit(self.server.native)
+            self.send_bytes(303, location=urlunsplit((native.scheme, native.netloc, NATIVE_PAGES[path], "", "")))
         elif path == "/training":
             self.send_bytes(303, location="/training/")
         elif path == "/training/api/catalog":
             self.json(200, {"exercises": catalog()})
+        elif path == "/training/api/company":
+            self.company("status")
         elif path in ASSETS:
             name, kind = ASSETS[path]
             self.send_bytes(200, (STATIC / name).read_bytes(), kind)
@@ -84,25 +107,30 @@ class Worksheet(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self.allowed_host():
             return
-        if self.path != "/training/api/grade":
+        company_actions = {"/training/api/company/" + name: name for name in ("apply", "remove", "test")}
+        if self.path != "/training/api/grade" and self.path not in company_actions:
             return self.send_bytes(404)
         origin = self.headers.get("Origin")
         if origin and origin != "http://" + self.headers["Host"]:
-            return self.json(403, {"error": "Откройте локальный адрес тренажёра."})
+            return self.json(403, {"error": "Open the local training host."})
         if self.headers.get_content_type() != "application/json" or self.headers.get("Transfer-Encoding"):
-            return self.json(415, {"error": "Требуется JSON."})
+            return self.json(415, {"error": "A JSON request body is required."})
         try:
             length = int(self.headers.get("Content-Length", "-1"))
         except ValueError:
             length = -1
         if not 0 < length <= MAX_BODY:
-            return self.json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"error": "Проверьте размер конфигурации."})
+            return self.json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"error": "The configuration request is too large or empty."})
         try:
             payload = json.loads(self.rfile.read(length))
+            if self.path in company_actions:
+                if payload != {} or not origin or self.headers.get("Sec-Fetch-Site", "same-origin") != "same-origin":
+                    return self.json(403, {"error": "Run this company-profile action from the training page."})
+                return self.company(company_actions[self.path])
             if not isinstance(payload, dict) or not all(isinstance(payload.get(key), str) for key in ("exercise_id", "config")):
-                raise ValueError("Ожидаются exercise_id и config.")
+                raise ValueError("The JSON body must contain string fields exercise_id and config.")
             if payload["exercise_id"] not in {exercise["id"] for exercise in catalog()}:
-                return self.json(404, {"error": "Такого упражнения нет."})
+                return self.json(404, {"error": "Unknown exercise id."})
             result = grade(payload["exercise_id"], payload["config"])
         except (ValueError, UnicodeError, RecursionError) as exc:
             return self.json(422, {"error": str(exc)})

@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#12233a">
-    <title>Firewall Lab · Учебный модуль</title>
+    <title>Firewall Lab · Training Module</title>
     <link rel="stylesheet" href="style.css">
   </head>
   <body>
@@ -14,82 +14,115 @@
           <div class="brand-mark" aria-hidden="true">FL</div>
           <div>
             <p class="brand-name">Firewall Lab</p>
-            <p class="brand-subtitle">УЧЕБНЫЙ МОДУЛЬ</p>
+            <p class="brand-subtitle">TRAINING MODULE</p>
           </div>
         </div>
         <div class="topbar-actions">
-          <span class="mode-badge"><span class="mode-dot"></span>локальная практика</span>
-          <a class="native-link" href="/_lab/open">Открыть нативную консоль <span aria-hidden="true">↗</span></a>
+          <span class="mode-badge"><span class="mode-dot"></span>local practice</span>
+          <a class="native-link" href="/_lab/open">Open FortiOS Console <span aria-hidden="true">↗</span></a>
         </div>
       </header>
 
       <div class="workspace">
-        <aside class="catalog" aria-label="Каталог упражнений">
+        <aside class="catalog" aria-label="Exercise catalog">
           <div class="catalog-head">
             <div>
-              <p class="section-kicker">Тренировки</p>
-              <h1>Каталог упражнений</h1>
+              <p class="section-kicker">Practice</p>
+              <h1>Exercise catalog</h1>
             </div>
-            <button id="reload-catalog" class="ghost-button" type="button" title="Обновить каталог" aria-label="Обновить каталог">↻</button>
+            <button id="reload-catalog" class="ghost-button" type="button" title="Refresh catalog" aria-label="Refresh catalog">↻</button>
           </div>
-          <p class="catalog-note">Выберите упражнение. Черновик каждого упражнения сохраняется отдельно в этом браузере.</p>
-          <div id="catalog-status" class="catalog-status" role="status" aria-live="polite">Загрузка каталога…</div>
+          <p class="catalog-note">Select an exercise. Each exercise draft is saved separately in this browser.</p>
+          <div id="catalog-status" class="catalog-status" role="status" aria-live="polite">Loading catalog…</div>
           <div id="exercise-list" class="exercise-list"></div>
         </aside>
 
         <main class="content" id="main-content">
           <div id="page-status" class="page-status" role="status" aria-live="polite"></div>
+          <section id="company" class="card company-card" aria-labelledby="company-title">
+            <div class="card-head company-head">
+              <div>
+                <h2 id="company-title">Company Infrastructure</h2>
+                <p class="company-intro">LABCO has four departments: Human Resources, Finance, Engineering, and Operations. The profile adds employees, groups, and a RADIUS server to FortiOS.</p>
+              </div>
+              <span id="company-state" class="company-state" data-state="loading" role="status" aria-live="polite">Checking integration…</span>
+            </div>
+            <div class="company-body">
+              <div id="company-message" class="company-message" role="status" aria-live="polite">Checking profile status.</div>
+              <div class="company-counts" aria-label="LABCO company object counts" aria-live="polite">
+                <div class="company-count"><strong id="company-users">—</strong><span>Users</span></div>
+                <div class="company-count"><strong id="company-groups">—</strong><span>Groups</span></div>
+                <div class="company-count"><strong id="company-radius">—</strong><span>RADIUS</span></div>
+                <div class="company-count"><strong id="company-addresses">—</strong><span>Addresses</span></div>
+                <div class="company-count"><strong id="company-address-groups">—</strong><span>Address groups</span></div>
+              </div>
+              <div class="company-actions" aria-label="Company profile actions">
+                <button id="company-apply" class="primary-button" type="button" disabled>Load company profile</button>
+                <button id="company-remove" class="secondary-button" type="button" disabled>Remove profile</button>
+                <button id="company-test" class="secondary-button" type="button" disabled>Test RADIUS</button>
+                <button id="company-retry" class="ghost-button" type="button">Refresh status</button>
+              </div>
+              <div class="company-guidance"><span>Open the <a href="/_lab/open">FortiOS Console</a> and review editable LABCO-* objects under User &amp; Authentication &gt; User Definition / User Groups / RADIUS Servers. Review addresses and address groups under Policy &amp; Objects &gt; Addresses.</span></div>
+              <div class="company-paths" aria-label="FortiOS sections for training review">
+                <a class="company-path" href="/training/native/users" target="_blank" rel="noopener">User Definition</a>
+                <a class="company-path" href="/training/native/groups" target="_blank" rel="noopener">User Groups</a>
+                <a class="company-path" href="/training/native/radius" target="_blank" rel="noopener">RADIUS Servers</a>
+                <span class="company-path">Addresses</span>
+                <span class="company-path">Address Groups</span>
+              </div>
+            </div>
+          </section>
           <section id="empty-view" class="empty-view" aria-labelledby="empty-title">
             <div class="empty-mark" aria-hidden="true">+</div>
-            <h2 id="empty-title">Выберите упражнение</h2>
-            <p>Каталог загрузится с локального учебного API. Здесь можно редактировать конфигурацию, отправлять её на проверку и разбирать каждую ошибку.</p>
+            <h2 id="empty-title">Select an exercise</h2>
+            <p>The catalog loads from the local training API. Edit a configuration, submit it for checking, and review every issue here.</p>
           </section>
 
           <section id="exercise-view" class="exercise-view" hidden>
             <div class="exercise-heading">
               <div>
-                <p id="exercise-kicker" class="section-kicker">Практика</p>
+                <p id="exercise-kicker" class="section-kicker">Practice</p>
                 <h2 id="exercise-title"></h2>
                 <p id="exercise-description" class="exercise-description"></p>
               </div>
-              <div id="exercise-state" class="exercise-state">Черновик</div>
+              <div id="exercise-state" class="exercise-state">Draft</div>
             </div>
 
             <div class="work-grid">
               <section class="card config-card" aria-labelledby="config-title">
                 <div class="card-head">
                   <div>
-                    <p class="section-kicker">Рабочая конфигурация</p>
-                    <h3 id="config-title">Параметры упражнения</h3>
+                    <p class="section-kicker">Working configuration</p>
+                    <h3 id="config-title">Exercise configuration</h3>
                   </div>
-                  <span id="draft-label" class="draft-label">Автосохранение включено</span>
+                  <span id="draft-label" class="draft-label">Autosave enabled</span>
                 </div>
                 <div id="config-form" class="config-form"></div>
                 <div class="config-actions">
-                  <button id="reset-draft" class="secondary-button" type="button">Сбросить черновик</button>
-                  <button id="download-config" class="secondary-button" type="button">Скачать .conf</button>
-                  <button id="grade-config" class="primary-button" type="button">Проверить конфигурацию</button>
+                  <button id="reset-draft" class="secondary-button" type="button">Reset draft</button>
+                  <button id="download-config" class="secondary-button" type="button">Download .conf</button>
+                  <button id="grade-config" class="primary-button" type="button">Check configuration</button>
                 </div>
-                <p id="offline-note" class="offline-note">Оценка выполняется локальным учебным API без платной подписки и поддерживает ограниченный CLI-поднабор. Если сервис недоступен, черновик сохраняется, а итоговую проверку можно повторить позже и отдельно проверить в нативном FortiOS.</p>
+                <p id="offline-note" class="offline-note">Evaluation runs through the local training API without a paid subscription and covers a limited CLI subset. If the service is unavailable, the draft is preserved; retry later and verify the result separately in the FortiOS Console.</p>
               </section>
 
               <aside class="card brief-card" aria-labelledby="brief-title">
                 <div class="card-head compact-head">
                   <div>
-                    <p class="section-kicker">Контекст</p>
-                    <h3 id="brief-title">Перед началом</h3>
+                    <p class="section-kicker">Context</p>
+                    <h3 id="brief-title">Before you start</h3>
                   </div>
                 </div>
                 <div id="exercise-brief" class="brief-content"></div>
-                <div class="boundary-note"><strong>Граница модуля</strong><span>Эта страница помогает подготовить конфигурацию. Результат в настоящем FortiOS проверяйте отдельно через нативную консоль.</span></div>
+                <div class="boundary-note"><strong>Module boundary</strong><span>This page helps prepare a configuration. Verify the result separately in the FortiOS Console.</span></div>
               </aside>
             </div>
 
             <section id="result-card" class="card result-card" hidden aria-labelledby="result-title">
               <div class="card-head result-head">
                 <div>
-                  <p class="section-kicker">Проверка</p>
-                  <h3 id="result-title">Результат конфигурации</h3>
+                  <p class="section-kicker">Check</p>
+                  <h3 id="result-title">Configuration result</h3>
                 </div>
                 <div id="result-summary" class="result-summary"></div>
               </div>
@@ -97,7 +130,7 @@
               <div id="result-errors" class="result-errors" aria-live="polite"></div>
               <div class="comparison-wrap">
                 <table class="comparison-table">
-                  <thead><tr><th>Проверка</th><th>Ожидалось</th><th>Получено</th><th>Статус</th></tr></thead>
+                  <thead><tr><th>Check</th><th>Expected</th><th>Actual</th><th>Status</th></tr></thead>
                   <tbody id="comparison-body"></tbody>
                 </table>
               </div>

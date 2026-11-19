@@ -24,8 +24,9 @@ jobs:
       - name: Validate training exercises and companion
         run: |
           python -m pip install pytest==9.0.2
-          python -m pytest -q training/test_policy_lab.py
-          python -m py_compile training/server.py deploy/scripts/fixture-bridge.py
+          python -m pytest -q training
+          python -m py_compile training/server.py training/company_agent.py deploy/scripts/fixture-bridge.py
+          bash -n training/start-company.sh
           node --check training/static/app.js
           docker compose -f training/compose.yaml config --quiet
       - name: Validate the vendor playbook and native GUI check
