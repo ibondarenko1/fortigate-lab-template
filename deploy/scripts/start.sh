@@ -40,5 +40,36 @@ fi
 "$SCRIPT_DIR/render-startup-config.sh"
 cd "$DEPLOY_DIR"
 docker compose --env-file "$ENV_FILE" -f compose.yaml config --quiet
-docker compose --env-file "$ENV_FILE" -f compose.yaml up -d
-printf 'FortiGate lab started. GUI: https://127.0.0.1:%s\n' "${LAB_GUI_PORT:-18843}"
+docker compose --env-file "$ENV_FILE" -f compose.yaml up -d --wait --wait-timeout 300
+
+gui_port="${LAB_GUI_PORT:-18843}"
+printf 'Waiting for the FortiOS login page on port %s.\n' "$gui_port"
+python3 - "$gui_port" <<'PY'
+import http.client
+import ssl
+import sys
+import time
+
+port = int(sys.argv[1])
+context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+# This readiness probe only contacts the local lab and sends no credentials.
+context.check_hostname = False
+context.verify_mode = ssl.CERT_NONE
+deadline = time.monotonic() + 60
+
+while time.monotonic() < deadline:
+    connection = http.client.HTTPSConnection("127.0.0.1", port, timeout=3, context=context)
+    try:
+        connection.request("GET", "/login")
+        if 200 <= connection.getresponse().status < 400:
+            break
+    except (OSError, http.client.HTTPException):
+        pass
+    finally:
+        connection.close()
+    time.sleep(2)
+else:
+    raise SystemExit(f"FortiOS login page did not respond at https://127.0.0.1:{port}/login.")
+PY
+
+printf 'FortiOS is ready at https://127.0.0.1:%s/\n' "$gui_port"
