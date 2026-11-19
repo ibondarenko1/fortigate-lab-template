@@ -15,9 +15,18 @@
       ansible.builtin.assert:
         that:
           - (fortios_access_token | length > 0) != (fortios_local_password_file | length > 0)
-          - (ansible_httpapi_use_ssl | default(false) | bool) or (hostvars[inventory_hostname].ansible_host == '127.0.0.1' and fortios_local_password_file | length > 0)
+          - (ansible_httpapi_use_ssl | default(false) | bool) or (hostvars[inventory_hostname].ansible_host in ['127.0.0.1', 'localhost'] and fortios_local_password_file | length > 0)
           - not (ansible_httpapi_use_ssl | default(false) | bool) or (ansible_httpapi_validate_certs | default(true) | bool)
         fail_msg: Use a trusted HTTPS endpoint with a local API token, or the existing loopback lab bridge with a local password file.
+      delegate_to: localhost
+    - name: Verify that the named local HTTP bridge resolves only to loopback
+      ansible.builtin.command:
+        argv:
+          - "{{ ansible_playbook_python }}"
+          - "-c"
+          - "import ipaddress, socket; addresses = socket.getaddrinfo('localhost', None); assert addresses and all(ipaddress.ip_address(row[4][0]).is_loopback for row in addresses)"
+      changed_when: false
+      when: not (ansible_httpapi_use_ssl | default(false) | bool) and hostvars[inventory_hostname].ansible_host == 'localhost'
       delegate_to: localhost
   tasks:
     - name: Read system status from the native FortiOS API

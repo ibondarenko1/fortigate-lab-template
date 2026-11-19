@@ -41,6 +41,9 @@ fi
 cd "$DEPLOY_DIR"
 docker compose --env-file "$ENV_FILE" -f compose.yaml config --quiet
 docker compose --env-file "$ENV_FILE" -f compose.yaml up -d --wait --wait-timeout 300
+if [[ ${LAB_FIXTURE_BRIDGE:-0} == 1 ]]; then
+  python3 "$SCRIPT_DIR/fixture-bridge.py" apply
+fi
 
 gui_port="${LAB_GUI_PORT:-18843}"
 printf 'Waiting for the FortiOS login page on port %s.\n' "$gui_port"

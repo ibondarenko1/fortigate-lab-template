@@ -8,6 +8,11 @@ cd "$DEPLOY_DIR"
 COMPOSE_ARGS=(-f compose.yaml)
 if [[ -f .env ]]; then
   COMPOSE_ARGS=(--env-file .env "${COMPOSE_ARGS[@]}")
+  # shellcheck disable=SC1091
+  . ./.env
+fi
+if [[ ${LAB_FIXTURE_BRIDGE:-0} == 1 ]] && [[ -n $(docker compose "${COMPOSE_ARGS[@]}" ps -q client) ]] && [[ -n $(docker compose "${COMPOSE_ARGS[@]}" ps -q server) ]]; then
+  python3 "$SCRIPT_DIR/fixture-bridge.py" remove
 fi
 docker compose "${COMPOSE_ARGS[@]}" stop
 printf 'Lab stopped; VM overlays and native configuration were preserved.\n'

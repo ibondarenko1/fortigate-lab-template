@@ -21,6 +21,13 @@ jobs:
           python-version: "3.12"
       - name: Install the pinned Fortinet collection
         run: bash automation/install.sh
+      - name: Validate training exercises and companion
+        run: |
+          python -m pip install pytest==9.0.2
+          python -m pytest -q training/test_policy_lab.py
+          python -m py_compile training/server.py deploy/scripts/fixture-bridge.py
+          node --check training/static/app.js
+          docker compose -f training/compose.yaml config --quiet
       - name: Validate the vendor playbook and native GUI check
         run: |
           python -m py_compile scripts/check-native.py deploy/fortigate/launcher.py

@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#12233a">
+    <title>Firewall Lab · Учебный модуль</title>
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">FL</div>
+          <div>
+            <p class="brand-name">Firewall Lab</p>
+            <p class="brand-subtitle">УЧЕБНЫЙ МОДУЛЬ</p>
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <span class="mode-badge"><span class="mode-dot"></span>локальная практика</span>
+          <a class="native-link" href="/_lab/open">Открыть нативную консоль <span aria-hidden="true">↗</span></a>
+        </div>
+      </header>
+
+      <div class="workspace">
+        <aside class="catalog" aria-label="Каталог упражнений">
+          <div class="catalog-head">
+            <div>
+              <p class="section-kicker">Тренировки</p>
+              <h1>Каталог упражнений</h1>
+            </div>
+            <button id="reload-catalog" class="ghost-button" type="button" title="Обновить каталог" aria-label="Обновить каталог">↻</button>
+          </div>
+          <p class="catalog-note">Выберите упражнение. Черновик каждого упражнения сохраняется отдельно в этом браузере.</p>
+          <div id="catalog-status" class="catalog-status" role="status" aria-live="polite">Загрузка каталога…</div>
+          <div id="exercise-list" class="exercise-list"></div>
+        </aside>
+
+        <main class="content" id="main-content">
+          <div id="page-status" class="page-status" role="status" aria-live="polite"></div>
+          <section id="empty-view" class="empty-view" aria-labelledby="empty-title">
+            <div class="empty-mark" aria-hidden="true">+</div>
+            <h2 id="empty-title">Выберите упражнение</h2>
+            <p>Каталог загрузится с локального учебного API. Здесь можно редактировать конфигурацию, отправлять её на проверку и разбирать каждую ошибку.</p>
+          </section>
+
+          <section id="exercise-view" class="exercise-view" hidden>
+            <div class="exercise-heading">
+              <div>
+                <p id="exercise-kicker" class="section-kicker">Практика</p>
+                <h2 id="exercise-title"></h2>
+                <p id="exercise-description" class="exercise-description"></p>
+              </div>
+              <div id="exercise-state" class="exercise-state">Черновик</div>
+            </div>
+
+            <div class="work-grid">
+              <section class="card config-card" aria-labelledby="config-title">
+                <div class="card-head">
+                  <div>
+                    <p class="section-kicker">Рабочая конфигурация</p>
+                    <h3 id="config-title">Параметры упражнения</h3>
+                  </div>
+                  <span id="draft-label" class="draft-label">Автосохранение включено</span>
+                </div>
+                <div id="config-form" class="config-form"></div>
+                <div class="config-actions">
+                  <button id="reset-draft" class="secondary-button" type="button">Сбросить черновик</button>
+                  <button id="download-config" class="secondary-button" type="button">Скачать .conf</button>
+                  <button id="grade-config" class="primary-button" type="button">Проверить конфигурацию</button>
+                </div>
+                <p id="offline-note" class="offline-note">Оценка выполняется локальным учебным API без платной подписки и поддерживает ограниченный CLI-поднабор. Если сервис недоступен, черновик сохраняется, а итоговую проверку можно повторить позже и отдельно проверить в нативном FortiOS.</p>
+              </section>
+
+              <aside class="card brief-card" aria-labelledby="brief-title">
+                <div class="card-head compact-head">
+                  <div>
+                    <p class="section-kicker">Контекст</p>
+                    <h3 id="brief-title">Перед началом</h3>
+                  </div>
+                </div>
+                <div id="exercise-brief" class="brief-content"></div>
+                <div class="boundary-note"><strong>Граница модуля</strong><span>Эта страница помогает подготовить конфигурацию. Результат в настоящем FortiOS проверяйте отдельно через нативную консоль.</span></div>
+              </aside>
+            </div>
+
+            <section id="result-card" class="card result-card" hidden aria-labelledby="result-title">
+              <div class="card-head result-head">
+                <div>
+                  <p class="section-kicker">Проверка</p>
+                  <h3 id="result-title">Результат конфигурации</h3>
+                </div>
+                <div id="result-summary" class="result-summary"></div>
+              </div>
+              <div id="result-message" class="result-message" role="status"></div>
+              <div id="result-errors" class="result-errors" aria-live="polite"></div>
+              <div class="comparison-wrap">
+                <table class="comparison-table">
+                  <thead><tr><th>Проверка</th><th>Ожидалось</th><th>Получено</th><th>Статус</th></tr></thead>
+                  <tbody id="comparison-body"></tbody>
+                </table>
+              </div>
+            </section>
+          </section>
+        </main>
+      </div>
+    </div>
+    <script src="app.js" defer></script>
+  </body>
+</html>
