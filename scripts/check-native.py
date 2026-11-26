@@ -2,29 +2,16 @@
 """Check the native dashboard and firmware through the existing local lab tunnel."""
 
 import argparse
-import gzip
 import json
 import re
-from http.cookiejar import CookieJar
 from urllib.error import URLError
 from urllib.parse import urlsplit
-from urllib.request import HTTPCookieProcessor, HTTPRedirectHandler, ProxyHandler, build_opener
 
-
-class SameOriginRedirects(HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        old = urlsplit(req.full_url)
-        new = urlsplit(newurl)
-        if (old.scheme, old.netloc) != (new.scheme, new.netloc):
-            raise ValueError("The lab server redirected outside the local tunnel")
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
+from fortios_http import open_lab_bridge, read_body
 
 
 def check(port: int) -> dict:
-    origin = f"http://127.0.0.1:{port}"
-    browser = build_opener(ProxyHandler({}), SameOriginRedirects(), HTTPCookieProcessor(CookieJar()))
-    with browser.open(origin + "/_lab/open", timeout=10):
-        pass
+    origin, browser = open_lab_bridge(port)
     with browser.open(origin + "/system/dashboard/1", timeout=10) as response:
         content = read_body(response)
         title = re.search(rb"<title>\s*FortiGate[^<]*</title>", content, re.I)
@@ -36,13 +23,6 @@ def check(port: int) -> dict:
     if status.get("status") != "success" or not re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+", version):
         raise ValueError("The dashboard did not report a valid FortiOS version")
     return {"dashboard": origin + "/system/dashboard/1", "version": version, "build": status.get("build")}
-
-
-def read_body(response) -> bytes:
-    if response.headers.get("Content-Encoding", "").lower() == "gzip":
-        with gzip.GzipFile(fileobj=response) as decoded:
-            return decoded.read(1024 * 1024)
-    return response.read(1024 * 1024)
 
 
 def main() -> None:

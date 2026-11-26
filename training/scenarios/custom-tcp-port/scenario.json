@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "custom-tcp-port",
+  "title": "Custom TCP service",
+  "description": "Define a custom TCP service on 8081, allow only that service, and explicitly deny ordinary HTTP.",
+  "task_prompt": "Repair the custom TCP service so the scoped API rule allows TCP/8081 and still explicitly denies HTTP.",
+  "help": "Required service: LAB-API-TCP must use tcp-portrange 8081. Keep the exercise within the FortiOS trial limit of three firewall policies.",
+  "cases": [
+    {"id":"custom-api-allowed","description":"The custom service must allow TCP/8081.","source":"10.231.31.10","destination":"10.231.32.10","incoming":"port2","outgoing":"port3","protocol":"tcp","destination_port":8081,"expected_outcome":"allowed","expected_policy":10},
+    {"id":"ordinary-http-denied","description":"The same API object must explicitly deny TCP/80.","source":"10.231.31.10","destination":"10.231.32.10","incoming":"port2","outgoing":"port3","protocol":"tcp","destination_port":80,"expected_outcome":"blocked","expected_policy":20}
+  ],
+  "flows": [
+    {"id":"custom-api-old-port","description":"The repaired service must not grant the starter's old TCP/8080 port.","source":"10.231.31.10","destination":"10.231.32.10","incoming":"port2","outgoing":"port3","protocol":"tcp","destination_port":8080,"expected_outcome":"blocked","expected_policy":null},
+    {"id":"custom-api-neighbor-port","description":"The custom service must not silently widen to TCP/8082.","source":"10.231.31.10","destination":"10.231.32.10","incoming":"port2","outgoing":"port3","protocol":"tcp","destination_port":8082,"expected_outcome":"blocked","expected_policy":null},
+    {"id":"custom-api-outside-client","description":"The custom API rule remains scoped to the named LAN client.","source":"10.231.31.11","destination":"10.231.32.10","incoming":"port2","outgoing":"port3","protocol":"tcp","destination_port":8081,"expected_outcome":"blocked","expected_policy":null}
+  ]
+}

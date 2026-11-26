@@ -4,6 +4,7 @@
   /* The local checker owns evaluation; this page edits CLI text only. */
   var state = {
     exercises: [], selected: null, draft: '', loading: false, grade: null,
+    compareBefore: '', compare: null, generation: 0, gradeRequest: 0, compareRequest: 0,
     company: {
       state: 'loading',
       counts: { users: null, groups: null, radius: null, addresses: null, address_groups: null },
@@ -19,10 +20,30 @@
   var pageStatus = el('page-status');
   var resultCard = el('result-card');
   var comparisonBody = el('comparison-body');
+  var compareCard = el('compare-card');
+  var compareBody = el('compare-body');
 
   function setStatus(message, tone) {
     pageStatus.textContent = message || '';
     pageStatus.className = 'page-status' + (tone ? ' ' + tone : '');
+  }
+
+  function invalidateExerciseRequests(clearResults) {
+    state.generation += 1;
+    state.gradeRequest += 1;
+    state.compareRequest += 1;
+    var gradeButton = el('grade-config');
+    var compareButton = el('compare-config');
+    if (gradeButton) { gradeButton.disabled = false; gradeButton.textContent = 'Check configuration'; }
+    if (compareButton) { compareButton.disabled = false; compareButton.textContent = 'Compare revisions'; }
+    if (clearResults !== false) {
+      state.grade = null;
+      state.compare = null;
+    }
+  }
+
+  function exerciseRequestIsCurrent(kind, requestId, generation, exerciseId) {
+    return state[kind + 'Request'] === requestId && state.generation === generation && state.selected && state.selected.id === exerciseId;
   }
 
   var companyStateLabels = {
@@ -242,9 +263,10 @@
   function selectExercise(id) {
     var exercise = state.exercises.find(function (item) { return item.id === id; });
     if (!exercise) return;
+    invalidateExerciseRequests();
     state.selected = exercise;
     state.draft = readDraft(exercise);
-    state.grade = null;
+    state.compareBefore = initialConfig(exercise.config);
     renderCatalog();
     renderExercise();
     var resumed = state.draft !== initialConfig(exercise.config);
@@ -267,6 +289,7 @@
     renderConfigForm();
     renderBrief();
     renderGrade();
+    renderCompare();
   }
 
   function renderConfigForm() {
@@ -284,12 +307,12 @@
     editor.setAttribute('aria-describedby', 'offline-note');
     editor.addEventListener('input', function () {
       state.draft = editor.value;
+      invalidateExerciseRequests();
       saveDraft();
       el('draft-label').textContent = 'Draft saved locally';
-      if (state.grade) {
-        state.grade = null;
-        renderGrade();
-      }
+      setStatus('Draft changed. Run the check again to grade this revision.', 'info');
+      renderGrade();
+      renderCompare();
     });
     wrapper.appendChild(editor);
     wrapper.appendChild(makeElement('small', 'field-help', 'Training CLI snippet only: address, service custom, and firewall policy. Do not paste a full device backup or secrets here.'));
@@ -341,17 +364,47 @@
     return outcomeLabel(actual.outcome) + (actual.rule_identity ? ' · ' + identityLabel(actual.rule_identity) : '');
   }
 
+  function policyScopeText(policy) {
+    if (!policy) return '';
+    var src = Array.isArray(policy.srcaddr) ? policy.srcaddr.join(',') : '';
+    var dst = Array.isArray(policy.dstaddr) ? policy.dstaddr.join(',') : '';
+    var services = Array.isArray(policy.service) ? policy.service.join(',') : '';
+    var scope = [src && 'src ' + src, dst && 'dst ' + dst, services && 'svc ' + services].filter(Boolean).join(' · ');
+    return scope ? ' · ' + scope : '';
+  }
+
+  function requestText(request) {
+    if (!request) return '';
+    var source = request.source || '—';
+    var destination = request.destination || '—';
+    var port = request.destination_port == null ? '—' : String(request.destination_port);
+    return source + ' → ' + destination + ':' + port;
+  }
+
   function normaliseGrade(payload) {
-    var rows = Array.isArray(payload && payload.cases) ? payload.cases.map(function (item, index) {
+    var cases = Array.isArray(payload && payload.cases) ? payload.cases : [];
+    var boundaries = Array.isArray(payload && payload.boundaries) ? payload.boundaries : [];
+    var rows = cases.map(function (item, index) {
       return {
         name: item.description || item.id || ('Scenario ' + (index + 1)),
-        expected: expectedText(item),
-        actual: actualText(item),
+        request: requestText(item.request),
+        expected: expectedText(item) + policyScopeText(item.expected && item.expected.policy),
+        actual: actualText(item) + policyScopeText(item.actual && item.actual.policy),
         pass: typeof item.pass === 'boolean' ? item.pass : undefined,
         message: item.feedback || '',
         action: item.hint || item.feedback || ''
       };
-    }) : [];
+    }).concat(boundaries.map(function (item, index) {
+      return {
+        name: 'Boundary · ' + (item.description || item.id || ('Boundary ' + (index + 1))),
+        request: requestText(item.request),
+        expected: expectedText(item) + policyScopeText(item.expected && item.expected.policy),
+        actual: actualText(item) + policyScopeText(item.actual && item.actual.policy),
+        pass: typeof item.pass === 'boolean' ? item.pass : false,
+        message: item.feedback || '',
+        action: item.feedback || 'Review the boundary result and current rule scope.'
+      };
+    }));
     var errors = Array.isArray(payload && payload.errors) ? payload.errors.map(function (item) {
       var line = item.line ? ' · line ' + item.line : '';
       return {
@@ -361,14 +414,138 @@
       };
     }) : [];
     var summary = payload && payload.summary;
+    var boundaryScore = summary && summary.boundary_total !== undefined ? ' · boundaries ' + String(summary.boundary_passed || 0) + '/' + String(summary.boundary_total) : '';
     return {
       available: true,
       passed: Boolean(payload && payload.pass),
       rows: rows,
       errors: errors,
-      score: summary && summary.total !== undefined ? String(summary.passed || 0) + '/' + String(summary.total) : '',
+      score: summary && summary.total !== undefined ? String(summary.passed || 0) + '/' + String(summary.total) + ' cases' + boundaryScore : '',
       message: payload && (payload.feedback || payload.message) || ''
     };
+  }
+
+  function compareIdentity(value) {
+    if (!value) return 'no explicit rule';
+    return identityLabel(value);
+  }
+
+  function compareSideText(side) {
+    if (!side) return '—';
+    return outcomeLabel(side.outcome) + ' · ' + compareIdentity(side.rule_identity);
+  }
+
+  function normaliseCompare(payload) {
+    var errors = Array.isArray(payload && payload.errors) ? payload.errors.map(function (item) {
+      var line = item.line ? ' · line ' + item.line : '';
+      return { name: (item.side || 'config') + ' · ' + (item.code || 'error') + line, message: item.message || 'The revision could not be parsed.' };
+    }) : [];
+    var flows = Array.isArray(payload && payload.flows) ? payload.flows.map(function (item) {
+      return {
+        id: item.id || '',
+        name: item.description || item.id || 'Flow',
+        request: requestText(item.request || { source: item.source, destination: item.destination, destination_port: item.destination_port }),
+        before: compareSideText(item.before),
+        after: compareSideText(item.after),
+        changed: item.changed === true
+      };
+    }) : [];
+    var summary = payload && payload.summary;
+    return {
+      available: true,
+      passed: errors.length === 0,
+      errors: errors,
+      flows: flows,
+      scopeChanges: Array.isArray(payload && payload.scope_changes) ? payload.scope_changes : [],
+      score: summary && summary.total !== undefined ? String(summary.changed || 0) + '/' + String(summary.total) + ' changed' : '',
+      message: errors.length ? 'Fix the indicated revision before comparing again.' : flows.length ? 'The comparison is complete. Review changed flows and scope changes.' : 'No flow results were returned.'
+    };
+  }
+
+  function scopeText(change) {
+    var before = change.before == null ? 'absent' : JSON.stringify(change.before);
+    var after = change.after == null ? 'absent' : JSON.stringify(change.after);
+    return (change.kind || 'object') + ' ' + (change.name || 'unnamed') + ': ' + before + ' → ' + after;
+  }
+
+  function renderCompare() {
+    if (!state.selected) {
+      compareCard.hidden = true;
+      return;
+    }
+    compareCard.hidden = false;
+    var beforeEditor = el('before-editor');
+    if (document.activeElement !== beforeEditor) beforeEditor.value = state.compareBefore;
+    el('after-preview').textContent = state.draft;
+    var compare = state.compare;
+    el('compare-summary').textContent = compare ? compare.score || (compare.errors.length ? 'Review errors' : 'Compared') : 'Choose a baseline and a draft';
+    el('compare-summary').className = 'result-summary ' + (compare && compare.errors.length ? 'fail' : compare ? 'pass' : 'unknown');
+    el('compare-message').textContent = compare ? compare.message : 'A comparison checks policy order, resolved addresses, and service ports for each exercise flow.';
+    var errors = el('compare-errors');
+    errors.replaceChildren();
+    (compare ? compare.errors : []).forEach(function (item) {
+      var line = makeElement('div', 'error-line');
+      line.appendChild(makeElement('span', 'error-bullet', '!'));
+      line.appendChild(makeElement('strong', '', item.name));
+      line.appendChild(makeElement('span', '', item.message));
+      errors.appendChild(line);
+    });
+    compareBody.replaceChildren();
+    if (!compare || !compare.flows.length) {
+      var empty = document.createElement('tr');
+      var cell = makeElement('td', 'comparison-empty', compare ? 'No flow results were returned.' : 'Run a comparison to see which flows changed.');
+      cell.colSpan = 4;
+      empty.appendChild(cell);
+      compareBody.appendChild(empty);
+    } else {
+      compare.flows.forEach(function (flow) {
+        var tr = document.createElement('tr');
+        tr.className = flow.changed ? 'row-fail' : 'row-pass';
+        var flowCell = makeElement('th', 'flow-cell');
+        flowCell.appendChild(makeElement('strong', '', flow.name + (flow.id ? ' · ' + flow.id : '')));
+        if (flow.request) flowCell.appendChild(makeElement('small', 'flow-request', flow.request));
+        tr.appendChild(flowCell);
+        tr.appendChild(makeElement('td', 'value-cell', flow.before));
+        tr.appendChild(makeElement('td', 'value-cell', flow.after));
+        tr.appendChild(makeElement('td', 'status-cell', flow.changed ? 'Changed' : 'Same'));
+        compareBody.appendChild(tr);
+      });
+    }
+    var scope = el('scope-changes');
+    scope.replaceChildren();
+    if (compare && compare.scopeChanges.length) {
+      scope.appendChild(makeElement('strong', '', 'Resolved scope changes'));
+      var list = makeElement('ul', 'scope-change-list');
+      compare.scopeChanges.forEach(function (change) { list.appendChild(makeElement('li', '', scopeText(change))); });
+      scope.appendChild(list);
+    }
+  }
+
+  async function compareRevisions() {
+    if (!state.selected) return;
+    var exerciseId = state.selected.id;
+    var generation = state.generation;
+    var requestId = ++state.compareRequest;
+    var button = el('compare-config');
+    state.compareBefore = el('before-editor').value;
+    var candidate = state.draft;
+    button.disabled = true;
+    button.textContent = 'Comparing...';
+    try {
+      var payload = await apiRequest('compare', { method: 'POST', body: JSON.stringify({ exercise_id: exerciseId, before: state.compareBefore, after: candidate }) });
+      if (!exerciseRequestIsCurrent('compare', requestId, generation, exerciseId)) return;
+      state.compare = normaliseCompare(payload);
+      setStatus(state.compare.errors.length ? 'Comparison needs attention.' : 'Policy revisions compared.', state.compare.errors.length ? 'warning' : 'success');
+    } catch (error) {
+      if (!exerciseRequestIsCurrent('compare', requestId, generation, exerciseId)) return;
+      state.compare = { available: false, passed: false, errors: [{ name: 'API', message: 'Training API unavailable. Revisions were kept in this browser.' }], flows: [], scopeChanges: [], score: '', message: 'Retry after the local service is restored.' };
+      setStatus('Training API unavailable; comparison inputs were preserved.', 'error');
+    } finally {
+      if (!exerciseRequestIsCurrent('compare', requestId, generation, exerciseId)) return;
+      button.disabled = false;
+      button.textContent = 'Compare revisions';
+      renderCompare();
+    }
   }
 
   function renderGrade() {
@@ -410,7 +587,10 @@
     grade.rows.forEach(function (row) {
       var tr = document.createElement('tr');
       tr.className = row.pass === true ? 'row-pass' : row.pass === false ? 'row-fail' : 'row-unknown';
-      tr.appendChild(makeElement('th', '', row.name));
+      var rowCell = makeElement('th', 'flow-cell');
+      rowCell.appendChild(makeElement('strong', '', row.name));
+      if (row.request) rowCell.appendChild(makeElement('small', 'flow-request', row.request));
+      tr.appendChild(rowCell);
       tr.appendChild(makeElement('td', 'value-cell', row.expected || '—'));
       tr.appendChild(makeElement('td', 'value-cell', row.actual || '—'));
       var status = makeElement('td', 'status-cell');
@@ -422,18 +602,25 @@
 
   async function grade() {
     if (!state.selected) return;
+    var exerciseId = state.selected.id;
+    var generation = state.generation;
+    var requestId = ++state.gradeRequest;
+    var candidate = state.draft;
     var button = el('grade-config');
     button.disabled = true;
     button.textContent = 'Checking...';
     setStatus('Configuration is being sent for checking...', 'info');
     try {
-      var payload = await apiRequest('grade', { method: 'POST', body: JSON.stringify({ exercise_id: state.selected.id, config: state.draft }) });
+      var payload = await apiRequest('grade', { method: 'POST', body: JSON.stringify({ exercise_id: exerciseId, config: candidate }) });
+      if (!exerciseRequestIsCurrent('grade', requestId, generation, exerciseId)) return;
       state.grade = normaliseGrade(payload);
       setStatus(state.grade.passed ? 'Check completed: configuration accepted.' : 'Check completed: some lines need fixes.', state.grade.passed ? 'success' : 'warning');
     } catch (error) {
+      if (!exerciseRequestIsCurrent('grade', requestId, generation, exerciseId)) return;
       state.grade = { available: false, passed: false, rows: [], errors: [], score: '', message: 'Training API unavailable. Draft preserved; retry after the service is restored.' };
       setStatus('Training API unavailable. Draft preserved; retry the check later.', 'error');
     } finally {
+      if (!exerciseRequestIsCurrent('grade', requestId, generation, exerciseId)) return;
       button.disabled = false;
       button.textContent = 'Check configuration';
       renderGrade();
@@ -442,11 +629,12 @@
 
   function resetDraft() {
     if (!state.selected || !window.confirm("Remove this exercise's local draft and restore the starter configuration?")) return;
+    invalidateExerciseRequests();
     state.draft = initialConfig(state.selected.config);
-    state.grade = null;
     try { localStorage.removeItem(draftKey(state.selected)); } catch (error) { /* ignore storage restrictions */ }
     renderConfigForm();
     renderGrade();
+    renderCompare();
     el('draft-label').textContent = 'Autosave enabled';
     setStatus('Draft reset.', 'info');
   }
@@ -496,6 +684,20 @@
   el('company-test').addEventListener('click', function () { companyMutation('test'); });
   el('company-retry').addEventListener('click', loadCompany);
   el('grade-config').addEventListener('click', grade);
+  el('compare-config').addEventListener('click', compareRevisions);
+  el('compare-reset').addEventListener('click', function () {
+    if (!state.selected) return;
+    invalidateExerciseRequests();
+    state.compareBefore = initialConfig(state.selected.config);
+    renderCompare();
+    setStatus('Baseline restored.', 'info');
+  });
+  el('before-editor').addEventListener('input', function () {
+    invalidateExerciseRequests();
+    state.compareBefore = this.value;
+    renderCompare();
+    setStatus('Baseline changed. Run comparison again.', 'info');
+  });
   el('reset-draft').addEventListener('click', resetDraft);
   el('download-config').addEventListener('click', downloadConfig);
   el('reload-catalog').addEventListener('click', loadCatalog);

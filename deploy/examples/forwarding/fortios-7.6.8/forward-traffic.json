@@ -1,0 +1,79 @@
+{
+  "status": "success",
+  "results": [
+    {
+      "eventtime": 1795652858340411956,
+      "type": "traffic",
+      "subtype": "forward",
+      "srcip": "192.0.2.10",
+      "srcport": 41437,
+      "dstip": "198.51.100.20",
+      "dstport": 80,
+      "proto": 6,
+      "action": "close",
+      "policyid": 2
+    },
+    {
+      "eventtime": 1795652865453248646,
+      "type": "traffic",
+      "subtype": "forward",
+      "srcip": "192.0.2.10",
+      "srcport": 44213,
+      "dstip": "198.51.100.20",
+      "dstport": 8080,
+      "proto": 6,
+      "action": "deny",
+      "policyid": 3
+    },
+    {
+      "eventtime": 1795652864429302913,
+      "type": "traffic",
+      "subtype": "forward",
+      "srcip": "192.0.2.10",
+      "srcport": 44213,
+      "dstip": "198.51.100.20",
+      "dstport": 8080,
+      "proto": 6,
+      "action": "deny",
+      "policyid": 3
+    },
+    {
+      "eventtime": 1795652863405315823,
+      "type": "traffic",
+      "subtype": "forward",
+      "srcip": "192.0.2.10",
+      "srcport": 44213,
+      "dstip": "198.51.100.20",
+      "dstport": 8080,
+      "proto": 6,
+      "action": "deny",
+      "policyid": 3
+    },
+    {
+      "eventtime": 1795652862381322311,
+      "type": "traffic",
+      "subtype": "forward",
+      "srcip": "192.0.2.10",
+      "srcport": 44213,
+      "dstip": "198.51.100.20",
+      "dstport": 8080,
+      "proto": 6,
+      "action": "deny",
+      "policyid": 3
+    },
+    {
+      "eventtime": 1795652861395101266,
+      "type": "traffic",
+      "subtype": "forward",
+      "srcip": "192.0.2.10",
+      "srcport": 44213,
+      "dstip": "198.51.100.20",
+      "dstport": 8080,
+      "proto": 6,
+      "action": "deny",
+      "policyid": 3
+    }
+  ],
+  "version": "v7.6.8",
+  "build": 3744
+}

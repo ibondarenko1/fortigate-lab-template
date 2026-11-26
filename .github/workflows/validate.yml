@@ -29,6 +29,20 @@ jobs:
           bash -n training/start-company.sh
           node --check training/static/app.js
           docker compose -f training/compose.yaml config --quiet
+          bash deploy/scripts/verify-forwarding.sh \
+            --probes examples/forwarding/fortios-7.6.8/probes.jsonl \
+            --logs examples/forwarding/fortios-7.6.8/forward-traffic.json \
+            --output "$RUNNER_TEMP/forwarding-report.json"
+      - name: Run the packaged worksheet over HTTP
+        env:
+          WORKSHEET_PORT: 28846
+        run: |
+          compose=(docker compose -p policy-lab-ci -f training/compose.yaml)
+          trap '"${compose[@]}" down' EXIT
+          "${compose[@]}" up --build -d --wait --wait-timeout 60
+          python scripts/smoke-worksheet.py --port "$WORKSHEET_PORT"
+      - name: Check FreeRADIUS accept and reject responses in isolation
+        run: bash training/radius/run-selftest.sh
       - name: Validate the vendor playbook and native GUI check
         run: |
           python -m py_compile scripts/check-native.py deploy/fortigate/launcher.py

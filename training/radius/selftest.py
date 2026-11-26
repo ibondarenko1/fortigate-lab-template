@@ -8,6 +8,7 @@ import socket
 import struct
 import os
 import sys
+import time
 
 
 def attribute(kind, value):
@@ -58,7 +59,7 @@ def request(username, password, shared):
     return code
 
 
-def main():
+def check_responses():
     shared = Path("/run/secrets/radius_shared").read_bytes().strip()
     password = Path("/run/secrets/radius_password").read_bytes().strip()
     assert request(b"labco.radius.student", password, shared) == 2, "Positive test failed"
@@ -67,7 +68,23 @@ def main():
     print("PASS: PAP accepted the synthetic student; wrong password and unknown user rejected; all response Message-Authenticators verified")
 
 
+def wait_for_fixture():
+    # docker run -d returns before the bootstrap has created the credentials
+    # and before FreeRADIUS has bound its socket. Retry only startup failures.
+    deadline = time.monotonic() + 15
+    while True:
+        try:
+            check_responses()
+            return
+        except (FileNotFoundError, TimeoutError, ConnectionRefusedError) as exc:
+            if time.monotonic() >= deadline:
+                raise SystemExit("FreeRADIUS did not become ready in 15 seconds") from exc
+            time.sleep(0.2)
+
+
 if __name__ == "__main__":
+    if not __debug__:
+        raise SystemExit("The RADIUS self-test requires Python assertions")
     if sys.argv[1:] == ["--bootstrap-disposable"]:
         if os.environ.get("RADIUS_SELFTEST") != "true":
             raise SystemExit("Enable RADIUS_SELFTEST only in a disposable isolated container")
@@ -77,5 +94,7 @@ if __name__ == "__main__":
                 output.write(secrets.token_hex(32))
             path.chmod(0o600)
         os.execv(sys.executable, [sys.executable, "/opt/radius/entrypoint.py"])
+    elif not sys.argv[1:]:
+        wait_for_fixture()
     else:
-        main()
+        raise SystemExit("Usage: selftest.py [--bootstrap-disposable]")

@@ -1,17 +1,17 @@
 cff-version: 1.2.0
 type: software
-title: FortiGate Lab Template
+title: FortiGate Policy Lab
 message: "If you use this lab in a course or publication, you can cite this release."
 authors:
   - given-names: Ievgen
     family-names: Bondarenko
     website: https://github.com/ibondarenko1
-version: "0.1.0"
-date-released: "2026-11-19"
+version: "0.2.0"
+date-released: "2026-11-26"
 license: MIT
 repository-code: https://github.com/ibondarenko1/fortigate-lab-template
 url: https://ibondarenko1.github.io/fortigate-lab-template/
-abstract: "A self-hosted FortiGate lab for practicing FortiOS firewall policies, RADIUS authentication and network automation."
+abstract: "A teaching lab for comparing IPv4/TCP firewall policies, grading FortiOS configuration exercises, and checking policy decisions against Forward Traffic logs on a FortiGate VM."
 keywords:
   - FortiGate
   - FortiOS
