@@ -70,13 +70,48 @@ A fresh lab creates `LAB-LAN-NET` and `LAB-DMZ-NET` from the subnets in `.env`. 
 - Policy 1, `LAB-LAN-DMZ-HTTP`, permits HTTP on TCP port 80.
 - Policy 2, `LAB-LAN-DMZ-DENY-8080`, denies TCP port 8080.
 
-The DMZ fixture serves HTTP on both ports. After activation, run this command from `deploy`:
+The DMZ fixture serves the same page on both ports. From the `deploy` directory on the activated lab host, run one capture.
 
 ```bash
 bash scripts/verify-forwarding.sh
 ```
 
-The script first confirms that both services respond from within the server container. It then checks that the LAN client reaches port 80 and cannot reach port 8080. Confirm the matching policy events in **Log & Report > Forward Traffic**; an unreachable port alone does not establish which component blocked it. Traffic logs are stored in FortiOS memory.
+A fresh deployment expects allow policy 1 and deny policy 2. If the active rules use different IDs, set them **when capturing**. For example, an instance with allow policy 2 and deny policy 3 uses this command.
+
+```bash
+FORTIOS_EXPECTED_ALLOW_POLICY_ID=2 FORTIOS_EXPECTED_DENY_POLICY_ID=3 bash scripts/verify-forwarding.sh
+```
+
+The script checks both listeners from the DMZ server. From the LAN client's network namespace, it records the time, TCP source port and destination of each probe. A successful HTTP probe must return status 200 and the expected body. For the other port, a client timeout alone leaves the firewall decision open.
+
+Save the path printed beside **Probe capture**. In the example below, replace the value of `probes` with that path. Export Forward Traffic using a read-only API administrator. Put its token in the `FORTIOS_ACCESS_TOKEN` environment variable and use a trusted HTTPS origin. If you already have the local sign-in bridge, replace the `--url` and `--ca` options with `--bridge-port 18787`.
+
+```bash
+probes=state/forwarding/probes-20261126T002733Z-ABC123.jsonl
+python3 ../scripts/export-forward-logs.py --probes "$probes" \
+  --url https://fortigate.example.local --ca /path/to/trusted-ca.pem \
+  --output state/forwarding/fortios-forward.json
+
+bash scripts/verify-forwarding.sh --probes "$probes" \
+  --logs state/forwarding/fortios-forward.json --output state/forwarding/report.json
+```
+
+The exporter queries `/api/v2/log/memory/traffic/forward` for the captured tuples, keeps the firmware version, build, and matching fields, and rejects incomplete responses. The last command reuses the same capture and returns a nonzero exit code if a flow lacks the evidence expected for its recorded policy. A matching `close` event can confirm an HTTP request that returned the fixture. A matching `deny` event identifies an explicit deny for a positive policy ID and an implicit deny for policy 0. A failed local fixture check, missing log, conflicting action or wrong policy ID is reported separately. [Observed capture and offline replay](examples/forwarding/)
+
+For JSONL or JSON exports from another source, preserve `eventtime`, both IP addresses and ports, `proto`, `type`, `subtype`, `action` and `policyid`. The parser prefers epoch timestamps. For records with only device-local date and time, pass the appliance timezone using `--fortios-timezone`, or set `FORWARDING_FORTIOS_TIMEZONE` for the shell wrapper.
+
+For an existing lab whose fixtures belong to another Compose project, set `FORWARD_CLIENT_CONTAINER`, `FORWARD_SERVER_CONTAINER`, `LAB_LAN_NODE`, `LAB_DMZ_NODE` and, if needed, `FORWARD_PROBE_EXPECTED_BODY` before capture. The helper validates that the containers are running and uses their actual network namespaces. The operating system normally assigns an ephemeral TCP source port to each probe.
+
+The parser and report can be exercised without a VM using the shipped synthetic evidence:
+
+```bash
+python3 scripts/forwarding_evidence.py report \
+  --probes examples/forwarding/probes.jsonl \
+  --logs examples/forwarding/forward-logs.jsonl \
+  --output state/forwarding/example-report.json
+```
+
+The expected states are one allow with evidence, one explicit deny, one implicit deny, and one locally unavailable service. The corresponding parser tests run in the normal validation workflow.
 
 ### Docker bridge filtering
 

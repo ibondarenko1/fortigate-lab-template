@@ -1,0 +1,3 @@
+{"eventtime":"1795644000500000000","srcip":"10.231.31.10","srcport":"41080","dstip":"10.231.32.10","dstport":"80","proto":"6","type":"traffic","subtype":"forward","action":"close","policyid":"1","date":"2026-11-25","time":"22:00:00"}
+{"eventtime":"1795644002500000000","srcip":"10.231.31.10","srcport":"41081","dstip":"10.231.32.10","dstport":"8080","proto":"tcp","type":"traffic","subtype":"forward","action":"deny","policyid":"2"}
+{"eventtime":"1795644004500000000","srcip":"10.231.31.10","srcport":"41082","dstip":"10.231.32.10","dstport":"8443","proto":"tcp","type":"traffic","subtype":"forward","action":"deny","policyid":"0"}
