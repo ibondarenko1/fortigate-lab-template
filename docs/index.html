@@ -3,30 +3,30 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="A reusable FortiGate and FortiOS lab for practicing firewall policies, traffic logs, RADIUS authentication, and read-only Ansible auditing.">
+  <meta name="description" content="FortiGate Policy Lab: a reusable FortiOS practice environment with an interactive evidence lesson, firewall policy exercises, traffic logs, RADIUS authentication, and read-only Ansible auditing.">
   <meta name="robots" content="index,follow">
   <meta name="theme-color" content="#0b1324">
   <link rel="canonical" href="https://ibondarenko1.github.io/fortigate-lab-template/">
   <meta property="og:type" content="website">
-  <meta property="og:site_name" content="FortiGate Lab Template">
-  <meta property="og:title" content="FortiGate Lab Template | FortiOS practice environment">
-  <meta property="og:description" content="Practice FortiOS firewall policy, forwarding logs, RADIUS authentication, and read-only Ansible auditing in a reusable open lab.">
+  <meta property="og:site_name" content="FortiGate Policy Lab">
+  <meta property="og:title" content="FortiGate Policy Lab | FortiOS practice environment">
+  <meta property="og:description" content="Practice FortiOS evidence correlation, firewall policy, forwarding logs, RADIUS authentication, and read-only Ansible auditing in a reusable open lab.">
   <meta property="og:url" content="https://ibondarenko1.github.io/fortigate-lab-template/">
   <meta property="og:image" content="https://ibondarenko1.github.io/fortigate-lab-template/lab-preview.png">
   <meta property="og:image:alt" content="Native FortiOS User Definition table showing synthetic LABCO users from four departments">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="FortiGate Lab Template | FortiOS practice environment">
-  <meta name="twitter:description" content="A reusable open lab for FortiOS policy, logging, RADIUS, and Ansible practice.">
+  <meta name="twitter:title" content="FortiGate Policy Lab | FortiOS practice environment">
+  <meta name="twitter:description" content="A reusable open lab for FortiOS evidence correlation, policy, logging, RADIUS, and Ansible practice.">
   <meta name="twitter:image" content="https://ibondarenko1.github.io/fortigate-lab-template/lab-preview.png">
   <meta name="twitter:image:alt" content="Native FortiOS User Definition table showing synthetic LABCO users from four departments">
-  <title>FortiGate Lab Template | FortiOS practice environment</title>
+  <title>FortiGate Policy Lab | FortiOS practice environment</title>
   <link rel="stylesheet" href="site.css">
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
     "@type": "LearningResource",
-    "name": "FortiGate Lab Template",
-    "description": "A reusable open lab for practicing FortiOS firewall policy, forwarding logs, RADIUS authentication, and read-only Ansible auditing.",
+    "name": "FortiGate Policy Lab",
+    "description": "A reusable open lab for practicing FortiOS evidence correlation, firewall policy, forwarding logs, RADIUS authentication, and read-only Ansible auditing.",
     "url": "https://ibondarenko1.github.io/fortigate-lab-template/",
     "image": "https://ibondarenko1.github.io/fortigate-lab-template/lab-preview.png",
     "learningResourceType": "Hands-on network security lab",
@@ -42,9 +42,9 @@
   <a class="skip-link" href="#main-content">Skip to content</a>
   <header class="site-header">
     <div class="shell nav-wrap">
-      <a class="brand" href="./" aria-label="FortiGate Lab Template home">
+      <a class="brand" href="./" aria-label="FortiGate Policy Lab home">
         <span class="brand-mark" aria-hidden="true">FG</span>
-        <span>FortiGate Lab Template</span>
+        <span>FortiGate Policy Lab</span>
       </a>
       <nav aria-label="Primary navigation">
         <a href="#setup">Setup</a>
@@ -58,10 +58,11 @@
   <main id="main-content">
     <section class="hero shell" aria-labelledby="hero-title">
       <div class="hero-copy">
-        <h1 id="hero-title">A FortiGate lab for practicing FortiOS.</h1>
-        <p class="hero-lede">Trace a connection from a LAN client to a DMZ web server, find the matching policy in FortiOS, and test an employee login through FreeRADIUS. Run the lab on your own host.</p>
+        <h1 id="hero-title">Build better FortiOS troubleshooting judgment.</h1>
+        <p class="hero-lede">Start with a short evidence lesson, then trace a LAN-to-DMZ connection, find the matching policy in FortiOS, and test an employee login through FreeRADIUS. Run the full lab on your own host.</p>
         <div class="hero-actions">
-          <a class="button button-primary" href="https://github.com/ibondarenko1/fortigate-lab-template/generate">Use this template <span aria-hidden="true">↗</span></a>
+          <a class="button button-primary" href="lesson.html">Start the evidence lesson <span aria-hidden="true">→</span></a>
+          <a class="button button-secondary" href="https://github.com/ibondarenko1/fortigate-lab-template/generate">Use this template <span aria-hidden="true">↗</span></a>
           <a class="button button-secondary" href="https://github.com/ibondarenko1/fortigate-lab-template/blob/main/deploy/README.md">Read the native guide</a>
         </div>
         <dl class="stats" aria-label="Lab facts">
@@ -81,7 +82,7 @@
     <section id="setup" class="section shell" aria-labelledby="setup-title">
       <div class="section-heading">
         <h2 id="setup-title">Choose a setup</h2>
-        <p>Select <strong>Use this template</strong> on GitHub and clone your copy. Run the commands from the repository root unless the guide names a different directory.</p>
+        <p>Start with the public lesson, then select <strong>Use this template</strong> on GitHub and clone your copy. Run the commands from the repository root unless the guide names a different directory.</p>
       </div>
       <div class="setup-grid">
         <article class="setup-card setup-card-native">
@@ -99,11 +100,12 @@
         <article class="setup-card">
           <p class="path-label">Docker worksheet</p>
           <h3>Practice policy logic without a VM image.</h3>
-          <p>Run three focused exercises covering a scoped HTTP rule, an ordered exception, and a custom TCP service. The checker reports the expected rule and the first rule that actually matches.</p>
+          <p>Run three focused exercises covering a scoped HTTP rule, an ordered exception, and a custom TCP service. The checker reports the expected rule and the first rule that actually matches. The revision comparison shows changed flows and resolved object scope.</p>
           <pre><code>docker compose -p fortigate-worksheet \
   -f training/compose.yaml up -d --build</code></pre>
           <p class="small-copy">Open <code>http://practice.localhost:18846/training/</code> on the Docker host. This path needs Docker and the Compose plugin, and does not need a FortiOS image or Fortinet account.</p>
-          <a class="inline-link" href="https://github.com/ibondarenko1/fortigate-lab-template#try-the-worksheet">Worksheet instructions <span aria-hidden="true">→</span></a>
+          <a class="inline-link" href="https://github.com/ibondarenko1/fortigate-lab-template#try-the-worksheet">README quick start <span aria-hidden="true">→</span></a>
+          <a class="inline-link" href="lesson.html">Open the troubleshooting lesson <span aria-hidden="true">→</span></a>
         </article>
       </div>
     </section>
@@ -117,6 +119,7 @@
           <article>
             <h3>Forwarding and logs</h3>
             <p><code>LAB-LAN-DMZ-HTTP</code> permits TCP 80. <code>LAB-LAN-DMZ-DENY-8080</code> denies TCP 8080. Run <code>bash scripts/verify-forwarding.sh</code> from <code>deploy</code>, then compare the matching events in <strong>Log &amp; Report &gt; Forward Traffic</strong>.</p>
+            <a class="dark-link" href="lesson.html">Diagnose a failed request <span aria-hidden="true">→</span></a>
           </article>
           <article>
             <h3>LABCO company profile</h3>
@@ -170,7 +173,7 @@
 
   <footer class="site-footer">
     <div class="shell footer-wrap">
-      <p><strong>FortiGate Lab Template</strong></p>
+      <p><strong>FortiGate Policy Lab</strong></p>
       <nav aria-label="Footer navigation">
         <a href="https://github.com/ibondarenko1/fortigate-lab-template">GitHub</a>
         <a href="https://github.com/ibondarenko1/fortigate-lab-template/generate">Use this template</a>

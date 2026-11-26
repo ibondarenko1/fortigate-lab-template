@@ -9,7 +9,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
-from policy_lab import catalog, grade
+try:
+    from policy_lab import catalog, compare, grade
+except ModuleNotFoundError:  # package import from the repository test runner
+    from .policy_lab import catalog, compare, grade
 
 
 STATIC = Path(__file__).resolve().parent / "static"
@@ -108,7 +111,7 @@ class Worksheet(BaseHTTPRequestHandler):
         if not self.allowed_host():
             return
         company_actions = {"/training/api/company/" + name: name for name in ("apply", "remove", "test")}
-        if self.path != "/training/api/grade" and self.path not in company_actions:
+        if self.path not in {"/training/api/grade", "/training/api/compare"} and self.path not in company_actions:
             return self.send_bytes(404)
         origin = self.headers.get("Origin")
         if origin and origin != "http://" + self.headers["Host"]:
@@ -127,6 +130,14 @@ class Worksheet(BaseHTTPRequestHandler):
                 if payload != {} or not origin or self.headers.get("Sec-Fetch-Site", "same-origin") != "same-origin":
                     return self.json(403, {"error": "Run this company-profile action from the training page."})
                 return self.company(company_actions[self.path])
+            if self.path == "/training/api/compare":
+                required = ("exercise_id", "before", "after")
+                if not isinstance(payload, dict) or not all(isinstance(payload.get(key), str) for key in required):
+                    raise ValueError("The JSON body must contain string fields exercise_id, before, and after.")
+                if payload["exercise_id"] not in {exercise["id"] for exercise in catalog()}:
+                    return self.json(404, {"error": "Unknown exercise id."})
+                result = compare(payload["exercise_id"], payload["before"], payload["after"])
+                return self.json(200, result)
             if not isinstance(payload, dict) or not all(isinstance(payload.get(key), str) for key in ("exercise_id", "config")):
                 raise ValueError("The JSON body must contain string fields exercise_id and config.")
             if payload["exercise_id"] not in {exercise["id"] for exercise in catalog()}:

@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A short FortiGate troubleshooting exercise about separating policy denies from service and routing failures.">
+  <title>FortiGate Policy Lab · Diagnose a TCP deny</title>
+  <link rel="stylesheet" href="site.css">
+</head>
+<body class="lesson-page">
+  <a class="skip-link" href="#lesson-main">Skip to exercise</a>
+  <header class="site-header">
+    <div class="shell nav-wrap">
+      <a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true">FG</span><span>FortiGate Policy Lab</span></a>
+      <nav aria-label="Primary navigation"><a href="index.html">Project home</a><a href="https://github.com/ibondarenko1/fortigate-lab-template">GitHub</a></nav>
+    </div>
+  </header>
+  <main id="lesson-main">
+    <section class="lesson-hero">
+      <div class="shell lesson-hero-inner">
+        <p class="eyebrow">Interactive troubleshooting lesson · synthetic evidence</p>
+        <h1>Did FortiGate deny the connection?</h1>
+        <p class="lesson-lede">A TCP request from a LAN client to a DMZ service fails. Use the evidence in each case to separate an explicit FortiOS policy decision from a stopped listener or a missing route.</p>
+        <div class="lesson-meta" aria-label="Scenario facts"><span>LAN 10.231.31.10</span><span>DMZ 10.231.32.10</span><span>TCP 8080</span></div>
+      </div>
+    </section>
+    <section class="lesson-section shell" aria-labelledby="brief-title">
+      <div class="lesson-brief">
+        <div><p class="eyebrow">Scenario</p><h2 id="brief-title">One timeout, three possible causes</h2><p>The two fixtures are intentionally labelled synthetic. In a real lab, generate the request from the client, confirm the service from the DMZ host, then correlate the fresh Forward Traffic record by source, destination, port, time, action and policy ID.</p></div>
+        <div class="lesson-callout"><strong>Evidence rule</strong><span>A timeout alone does not prove a firewall decision.</span></div>
+      </div>
+      <div id="case-list" class="lesson-cases"></div>
+      <div id="lesson-score" class="lesson-score" role="status" aria-live="polite"></div>
+      <p class="lesson-footnote">To compare these exercises with an observed session, inspect the ports, timestamps and policy IDs in the <a href="https://github.com/ibondarenko1/fortigate-lab-template/tree/main/deploy/examples/forwarding">FortiOS 7.6.8 capture and report</a>.</p>
+    </section>
+  </main>
+  <footer class="site-footer"><div class="shell footer-wrap"><p><strong>FortiGate Policy Lab</strong><br><span>Open training material for the community</span></p><nav aria-label="Footer navigation"><a href="index.html">Project home</a><a href="https://github.com/ibondarenko1/fortigate-lab-template/blob/main/README.md">README</a></nav></div></footer>
+  <script>
+    (function () {
+      'use strict';
+      var cases = [
+        {
+          title: 'Case 1 · Correlate the freshest evidence',
+          evidence: [
+            'Client probe: 10.231.31.10:41081 → 10.231.32.10:8080 over TCP at 2026-11-25T22:14:06Z.',
+            'Forward Traffic at 2026-11-25T22:14:07Z: src=10.231.31.10:41081 dst=10.231.32.10:8080 proto=TCP policyid=3 action=deny subtype=forward.',
+            'A nearby older row uses src=10.231.31.10:41080, is 47 seconds earlier, and has action=close. Match the current 5-tuple and time.'
+          ],
+          answer: 'policy',
+          explanation: 'The exact source port, destination, protocol, and destination port correlate with a fresh Forward Traffic row. Policy ID 3 and action deny identify an explicit FortiGate decision; the older source port is a stale connection.'
+        },
+        {
+          title: 'Case 2 · Check the endpoint evidence',
+          evidence: [
+            'Client probe: 10.231.31.10:41082 → 10.231.32.10:8080 over TCP at 2026-11-25T22:19:12Z.',
+            'DMZ check at 2026-11-25T22:19:12Z: 10.231.32.10:8080 returned connection refused.',
+            'Forward Traffic has no new row for this 5-tuple. The fixture process was stopped immediately before the probe.'
+          ],
+          answer: 'service',
+          explanation: 'Connection refused is endpoint evidence, and no Forward Traffic event matches source port 41082. Restore the listener before diagnosing a policy.'
+        },
+        {
+          title: 'Case 3 · Trace the missing path',
+          evidence: [
+            'Client probe: 10.231.31.10:41083 → 10.231.32.10:8080 over TCP at 2026-11-25T22:23:41Z.',
+            'DMZ check from the DMZ host at 2026-11-25T22:23:41Z: 10.231.32.10:8080 returned the fixture page.',
+            'Forward Traffic has no row matching source port 41083. The client route table has no 10.231.32.0/24 route via 10.231.31.1 and the gateway check failed.'
+          ],
+          answer: 'route',
+          explanation: 'The listener is healthy, but the client cannot reach the DMZ network and no FortiOS event matches source port 41083. Fix or verify routing before attributing the failure to a policy.'
+        }
+      ];
+      var labels = { policy: 'FortiGate policy deny', service: 'DMZ service failure', route: 'Routing or insufficient evidence' };
+      var root = document.getElementById('case-list');
+      var score = document.getElementById('lesson-score');
+      var correct = 0;
+      function node(tag, className, text) { var item = document.createElement(tag); if (className) item.className = className; if (text !== undefined) item.textContent = text; return item; }
+      function renderCase(item, index) {
+        var article = node('article', 'lesson-case'); article.id = 'case-' + index;
+        article.appendChild(node('p', 'eyebrow', 'Evidence set ' + String(index + 1).padStart(2, '0')));
+        article.appendChild(node('h3', '', item.title));
+        var list = node('ul', 'evidence-list'); item.evidence.forEach(function (line) { list.appendChild(node('li', '', line)); }); article.appendChild(list);
+        var form = node('fieldset', 'answer-fieldset'); form.appendChild(node('legend', 'field-label', 'What best explains the failed request?'));
+        Object.keys(labels).forEach(function (key) {
+          var label = node('label', 'answer-option'); var input = document.createElement('input'); input.type = 'radio'; input.name = 'case-' + index; input.value = key; label.append(input, node('span', '', labels[key])); form.appendChild(label);
+        });
+        var actions = node('div', 'lesson-actions'); var button = node('button', 'button button-primary', 'Check answer'); button.type = 'button'; actions.appendChild(button); article.appendChild(form); article.appendChild(actions);
+        var result = node('div', 'lesson-result'); result.hidden = true; result.setAttribute('role', 'status'); result.setAttribute('aria-live', 'polite'); article.appendChild(result);
+        button.addEventListener('click', function () {
+          var selected = form.querySelector('input:checked');
+          if (!selected) { result.hidden = false; result.className = 'lesson-result lesson-result-warning'; result.textContent = 'Choose one explanation before checking this case.'; return; }
+          var right = selected.value === item.answer;
+          if (article.dataset.answer === 'correct') correct -= 1;
+          if (right) correct += 1;
+          article.dataset.answer = right ? 'correct' : 'wrong';
+          result.hidden = false; result.className = 'lesson-result ' + (right ? 'lesson-result-correct' : 'lesson-result-wrong');
+          result.textContent = (right ? 'Correct. ' : 'Review the evidence. ') + item.explanation;
+          button.textContent = right ? 'Checked' : 'Try again';
+          score.textContent = 'Score: ' + correct + ' of ' + cases.length + ' cases solved.';
+        });
+        return article;
+      }
+      cases.forEach(function (item, index) { root.appendChild(renderCase(item, index)); });
+      score.textContent = 'Score: 0 of ' + cases.length + ' cases solved.';
+    }());
+  </script>
+</body>
+</html>
