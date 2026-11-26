@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "ordered-exception",
+  "title": "Ordered exception before broad allow",
+  "description": "Deny a restricted LAN host before the broader LAN HTTP allow; both policies use the same DMZ destination.",
+  "task_prompt": "Move the restricted deny before the broad LAN HTTP allow so first-match order protects the exception.",
+  "help": "Required order: policy ID 10 DENY-RESTRICTED-HTTP must appear before policy ID 20 ALLOW-LAN-HTTP.",
+  "cases": [
+    {"id":"restricted-http-denied","description":"The restricted host must stop at the first, narrower deny.","source":"10.231.31.20","destination":"10.231.32.10","incoming":"port2","outgoing":"port3","protocol":"tcp","destination_port":80,"expected_outcome":"blocked","expected_policy":10},
+    {"id":"regular-http-allowed","description":"A regular LAN host must continue to the broader allow.","source":"10.231.31.10","destination":"10.231.32.10","incoming":"port2","outgoing":"port3","protocol":"tcp","destination_port":80,"expected_outcome":"allowed","expected_policy":20}
+  ],
+  "flows": [
+    {"id":"restricted-http-neighbor","description":"A host immediately outside the restricted object may use the broad allow.","source":"10.231.31.21","destination":"10.231.32.10","incoming":"port2","outgoing":"port3","protocol":"tcp","destination_port":80,"expected_outcome":"allowed","expected_policy":20},
+    {"id":"restricted-http-adjacent-port","description":"The restricted host remains denied for a service outside HTTP.","source":"10.231.31.20","destination":"10.231.32.10","incoming":"port2","outgoing":"port3","protocol":"tcp","destination_port":443,"expected_outcome":"blocked","expected_policy":null}
+  ]
+}

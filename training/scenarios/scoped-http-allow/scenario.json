@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "scoped-http-allow",
+  "title": "Scoped HTTP allow",
+  "description": "Allow one LAN client to one DMZ web object on TCP/80 and explicitly deny the same pair on SSH.",
+  "task_prompt": "Add the missing explicit SSH deny for the scoped LAN client and DMZ web object.",
+  "help": "Required repair: policy ID 20 named DENY-LAN-SSH, srcaddr LAN-CLIENT, dstaddr DMZ-WEB, service SSH, action deny. Do not use ALL or rely on implicit deny.",
+  "cases": [
+    {"id":"lan-http-allowed","description":"The scoped web request must hit the explicit allow.","source":"10.231.31.10","destination":"10.231.32.10","incoming":"port2","outgoing":"port3","protocol":"tcp","destination_port":80,"expected_outcome":"allowed","expected_policy":10},
+    {"id":"lan-ssh-explicitly-denied","description":"The same scoped pair on SSH must hit an explicit deny, not implicit default deny.","source":"10.231.31.10","destination":"10.231.32.10","incoming":"port2","outgoing":"port3","protocol":"tcp","destination_port":22,"expected_outcome":"blocked","expected_policy":20}
+  ],
+  "flows": [
+    {"id":"lan-http-outside-client","description":"A second LAN host must not inherit the single-client HTTP allow.","source":"10.231.31.11","destination":"10.231.32.10","incoming":"port2","outgoing":"port3","protocol":"tcp","destination_port":80,"expected_outcome":"blocked","expected_policy":null},
+    {"id":"lan-http-neighbor-port","description":"The scoped web object must not allow an adjacent TCP port.","source":"10.231.31.10","destination":"10.231.32.10","incoming":"port2","outgoing":"port3","protocol":"tcp","destination_port":81,"expected_outcome":"blocked","expected_policy":null}
+  ]
+}

@@ -17,10 +17,12 @@ from __future__ import annotations
 
 import copy
 import ipaddress
+import json
+import os
 import re
 import shlex
-import textwrap
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
 
@@ -110,7 +112,7 @@ class _Case:
     protocol: str
     destination_port: int
     expected_outcome: str
-    expected_policy: _Policy
+    expected_policy: _Policy | None
 
 
 @dataclass(frozen=True)
@@ -123,6 +125,7 @@ class _Exercise:
     task_prompt: str
     help: str
     cases: tuple[_Case, ...]
+    flows: tuple[_Case, ...] = ()
 
 
 @dataclass
@@ -585,6 +588,42 @@ def _policy_signature(policy: _Policy) -> dict[str, Any]:
     }
 
 
+def _canonical_policy_scope(policy: _Policy | None, parsed: _Parsed) -> dict[str, Any] | None:
+    """Return the effective scope after resolving address and service objects."""
+
+    if policy is None:
+        return None
+
+    def networks(references: Iterable[str]) -> list[str]:
+        values: list[str] = []
+        for reference in references:
+            if reference == "all":
+                values.append("0.0.0.0/0")
+            elif reference in parsed.addresses:
+                values.append(str(parsed.addresses[reference].network))
+        return sorted(set(values))
+
+    def ports(references: Iterable[str]) -> list[list[int]]:
+        values: set[tuple[int, int]] = set()
+        for reference in references:
+            ranges = BUILTIN_TCP_SERVICES.get(reference)
+            if ranges is None and reference in parsed.services:
+                ranges = parsed.services[reference].tcp_ports
+            if ranges:
+                values.update(ranges)
+        return [[first, last] for first, last in sorted(values)]
+
+    signature = _policy_signature(policy)
+    for field in ("srcintf", "dstintf", "srcaddr", "dstaddr", "service"):
+        signature[field] = sorted(signature[field])
+    return {
+        **signature,
+        "src_networks": networks(policy.srcaddr),
+        "dst_networks": networks(policy.dstaddr),
+        "tcp_ports": ports(policy.service),
+    }
+
+
 def _policy_public(policy: _Policy | None) -> dict[str, Any] | None:
     if policy is None:
         return None
@@ -651,7 +690,7 @@ def _matches(policy: _Policy, case: _Case, parsed: _Parsed) -> bool:
 
 
 def _expected_signature(case: _Case) -> dict[str, Any]:
-    return _policy_signature(case.expected_policy)
+    return _policy_signature(case.expected_policy) if case.expected_policy is not None else {}
 
 
 def _case_public(case: _Case) -> dict[str, Any]:
@@ -669,394 +708,185 @@ def _case_public(case: _Case) -> dict[str, Any]:
         },
         "expected": {
             "outcome": case.expected_outcome,
-            "explicit": True,
+            "explicit": case.expected_policy is not None,
             "rule_identity": expected_identity,
             "policy": _expected_signature(case),
         },
     }
 
 
-def _exercise(
-    exercise_id: str,
-    title: str,
-    description: str,
-    config: str,
-    cases: Sequence[_Case],
-    *,
-    starter_config: str,
-    task_prompt: str,
-    help_text: str,
-) -> _Exercise:
-    return _Exercise(
-        exercise_id=exercise_id,
-        title=title,
-        description=description,
-        config=textwrap.dedent(config).strip() + "\n",
-        starter_config=textwrap.dedent(starter_config).strip() + "\n",
-        task_prompt=task_prompt,
-        help=help_text,
-        cases=tuple(cases),
-    )
-
-
-def _policy(
-    policy_id: int,
-    name: str,
-    *,
-    srcaddr: Sequence[str],
-    dstaddr: Sequence[str],
-    service: Sequence[str],
-    action: str,
-    srcintf: Sequence[str] = ("port2",),
-    dstintf: Sequence[str] = ("port3",),
-    logtraffic: str = "all",
-) -> _Policy:
+def _policy_from_data(data: Mapping[str, Any] | None) -> _Policy | None:
+    if data is None:
+        return None
     return _Policy(
-        policy_id=policy_id,
-        name=name,
-        srcintf=tuple(srcintf),
-        dstintf=tuple(dstintf),
-        srcaddr=tuple(srcaddr),
-        dstaddr=tuple(dstaddr),
-        action=action,
-        schedule="always",
-        service=tuple(service),
-        logtraffic=logtraffic,
-        status="enable",
+        policy_id=int(data["policy_id"]),
+        name=str(data["name"]),
+        srcintf=tuple(str(item) for item in data["srcintf"]),
+        dstintf=tuple(str(item) for item in data["dstintf"]),
+        srcaddr=tuple(str(item) for item in data["srcaddr"]),
+        dstaddr=tuple(str(item) for item in data["dstaddr"]),
+        action=str(data["action"]),
+        schedule=str(data.get("schedule", "always")),
+        service=tuple(str(item) for item in data["service"]),
+        logtraffic=str(data.get("logtraffic", "all")),
+        status=str(data.get("status", "enable")),
     )
 
 
-_SCOPED_HTTP_CONFIG = """
-config firewall address
-    edit "LAN-CLIENT"
-        set subnet 10.231.31.10 255.255.255.255
-    next
-    edit "DMZ-WEB"
-        set subnet 10.231.32.10 255.255.255.255
-    next
-end
-config firewall policy
-    edit 10
-        set name "ALLOW-LAN-HTTP"
-        set srcintf "port2"
-        set dstintf "port3"
-        set srcaddr "LAN-CLIENT"
-        set dstaddr "DMZ-WEB"
-        set action accept
-        set schedule "always"
-        set service "HTTP"
-        set logtraffic all
-    next
-    edit 20
-        set name "DENY-LAN-SSH"
-        set srcintf "port2"
-        set dstintf "port3"
-        set srcaddr "LAN-CLIENT"
-        set dstaddr "DMZ-WEB"
-        set action deny
-        set schedule "always"
-        set service "SSH"
-        set logtraffic all
-    next
-end
-"""
-
-_SCOPED_HTTP_STARTER_CONFIG = """
-config firewall address
-    edit "LAN-CLIENT"
-        set subnet 10.231.31.10 255.255.255.255
-    next
-    edit "DMZ-WEB"
-        set subnet 10.231.32.10 255.255.255.255
-    next
-end
-config firewall policy
-    edit 10
-        set name "ALLOW-LAN-HTTP"
-        set srcintf "port2"
-        set dstintf "port3"
-        set srcaddr "LAN-CLIENT"
-        set dstaddr "DMZ-WEB"
-        set action accept
-        set schedule "always"
-        set service "HTTP"
-        set logtraffic all
-    next
-end
-"""
-
-_ORDERED_EXCEPTION_CONFIG = """
-config firewall address
-    edit "LAN-USERS"
-        set subnet 10.231.31.0 255.255.255.0
-    next
-    edit "LAN-RESTRICTED"
-        set subnet 10.231.31.20 255.255.255.255
-    next
-    edit "DMZ-WEB"
-        set subnet 10.231.32.10 255.255.255.255
-    next
-end
-config firewall policy
-    edit 10
-        set name "DENY-RESTRICTED-HTTP"
-        set srcintf "port2"
-        set dstintf "port3"
-        set srcaddr "LAN-RESTRICTED"
-        set dstaddr "DMZ-WEB"
-        set action deny
-        set schedule "always"
-        set service "HTTP"
-        set logtraffic all
-    next
-    edit 20
-        set name "ALLOW-LAN-HTTP"
-        set srcintf "port2"
-        set dstintf "port3"
-        set srcaddr "LAN-USERS"
-        set dstaddr "DMZ-WEB"
-        set action accept
-        set schedule "always"
-        set service "HTTP"
-        set logtraffic all
-    next
-end
-"""
-
-_ORDERED_EXCEPTION_STARTER_CONFIG = """
-config firewall address
-    edit "LAN-USERS"
-        set subnet 10.231.31.0 255.255.255.0
-    next
-    edit "LAN-RESTRICTED"
-        set subnet 10.231.31.20 255.255.255.255
-    next
-    edit "DMZ-WEB"
-        set subnet 10.231.32.10 255.255.255.255
-    next
-end
-config firewall policy
-    edit 20
-        set name "ALLOW-LAN-HTTP"
-        set srcintf "port2"
-        set dstintf "port3"
-        set srcaddr "LAN-USERS"
-        set dstaddr "DMZ-WEB"
-        set action accept
-        set schedule "always"
-        set service "HTTP"
-        set logtraffic all
-    next
-    edit 10
-        set name "DENY-RESTRICTED-HTTP"
-        set srcintf "port2"
-        set dstintf "port3"
-        set srcaddr "LAN-RESTRICTED"
-        set dstaddr "DMZ-WEB"
-        set action deny
-        set schedule "always"
-        set service "HTTP"
-        set logtraffic all
-    next
-end
-"""
-
-_CUSTOM_PORT_CONFIG = """
-config firewall address
-    edit "LAN-CLIENT"
-        set subnet 10.231.31.10 255.255.255.255
-    next
-    edit "DMZ-API"
-        set subnet 10.231.32.10 255.255.255.255
-    next
-end
-config firewall service custom
-    edit "LAB-API-TCP"
-        set tcp-portrange 8081
-    next
-end
-config firewall policy
-    edit 10
-        set name "ALLOW-LAN-API"
-        set srcintf "port2"
-        set dstintf "port3"
-        set srcaddr "LAN-CLIENT"
-        set dstaddr "DMZ-API"
-        set action accept
-        set schedule "always"
-        set service "LAB-API-TCP"
-        set logtraffic all
-    next
-    edit 20
-        set name "DENY-LAN-HTTP"
-        set srcintf "port2"
-        set dstintf "port3"
-        set srcaddr "LAN-CLIENT"
-        set dstaddr "DMZ-API"
-        set action deny
-        set schedule "always"
-        set service "HTTP"
-        set logtraffic all
-    next
-end
-"""
-
-_CUSTOM_PORT_STARTER_CONFIG = _CUSTOM_PORT_CONFIG.replace(
-    "set tcp-portrange 8081",
-    "set tcp-portrange 8080",
-)
+def _case_from_data(
+    data: Mapping[str, Any],
+    reference_policies: Mapping[int, _Policy] | None = None,
+) -> _Case:
+    required = {
+        "id", "description", "source", "destination", "incoming", "outgoing",
+        "protocol", "destination_port", "expected_outcome", "expected_policy",
+    }
+    missing = sorted(required - set(data))
+    if missing:
+        raise ValueError(f"scenario flow is missing fields: {', '.join(missing)}")
+    expected_data = data["expected_policy"]
+    if isinstance(expected_data, (int, str)):
+        if reference_policies is None:
+            raise ValueError("expected_policy ID requires a parsed reference config")
+        try:
+            expected_policy = reference_policies[int(expected_data)]
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(f"expected_policy references unknown policy {expected_data!r}") from exc
+    elif expected_data is None or isinstance(expected_data, Mapping):
+        expected_policy = _policy_from_data(expected_data)
+    else:
+        raise ValueError("expected_policy must be null, a policy ID, or an object")
+    return _Case(
+        case_id=str(data["id"]),
+        description=str(data["description"]),
+        source=str(data["source"]),
+        destination=str(data["destination"]),
+        incoming=str(data["incoming"]),
+        outgoing=str(data["outgoing"]),
+        protocol=str(data["protocol"]),
+        destination_port=int(data["destination_port"]),
+        expected_outcome=str(data["expected_outcome"]),
+        expected_policy=expected_policy,
+    )
 
 
-_EXERCISES = (
-    _exercise(
-        "scoped-http-allow",
-        "Scoped HTTP allow",
-        "Allow one LAN client to one DMZ web object on TCP/80 and explicitly deny the same pair on SSH.",
-        _SCOPED_HTTP_CONFIG,
-        (
-            _Case(
-                "lan-http-allowed",
-                "The scoped web request must hit the explicit allow.",
-                "10.231.31.10",
-                "10.231.32.10",
-                "port2",
-                "port3",
-                "tcp",
-                80,
-                "allowed",
-                _policy(
-                    10,
-                    "ALLOW-LAN-HTTP",
-                    srcaddr=("LAN-CLIENT",),
-                    dstaddr=("DMZ-WEB",),
-                    service=("HTTP",),
-                    action="accept",
-                ),
-            ),
-            _Case(
-                "lan-ssh-explicitly-denied",
-                "The same scoped pair on SSH must hit an explicit deny, not implicit default deny.",
-                "10.231.31.10",
-                "10.231.32.10",
-                "port2",
-                "port3",
-                "tcp",
-                22,
-                "blocked",
-                _policy(
-                    20,
-                    "DENY-LAN-SSH",
-                    srcaddr=("LAN-CLIENT",),
-                    dstaddr=("DMZ-WEB",),
-                    service=("SSH",),
-                    action="deny",
-                ),
-            ),
-        ),
-        starter_config=_SCOPED_HTTP_STARTER_CONFIG,
-        task_prompt="Add the missing explicit SSH deny for the scoped LAN client and DMZ web object.",
-        help_text="Required repair: policy ID 20 named DENY-LAN-SSH, srcaddr LAN-CLIENT, dstaddr DMZ-WEB, service SSH, action deny. Do not use ALL or rely on implicit deny.",
-    ),
-    _exercise(
-        "ordered-exception",
-        "Ordered exception before broad allow",
-        "Deny a restricted LAN host before the broader LAN HTTP allow; both policies use the same DMZ destination.",
-        _ORDERED_EXCEPTION_CONFIG,
-        (
-            _Case(
-                "restricted-http-denied",
-                "The restricted host must stop at the first, narrower deny.",
-                "10.231.31.20",
-                "10.231.32.10",
-                "port2",
-                "port3",
-                "tcp",
-                80,
-                "blocked",
-                _policy(
-                    10,
-                    "DENY-RESTRICTED-HTTP",
-                    srcaddr=("LAN-RESTRICTED",),
-                    dstaddr=("DMZ-WEB",),
-                    service=("HTTP",),
-                    action="deny",
-                ),
-            ),
-            _Case(
-                "regular-http-allowed",
-                "A regular LAN host must continue to the broader allow.",
-                "10.231.31.10",
-                "10.231.32.10",
-                "port2",
-                "port3",
-                "tcp",
-                80,
-                "allowed",
-                _policy(
-                    20,
-                    "ALLOW-LAN-HTTP",
-                    srcaddr=("LAN-USERS",),
-                    dstaddr=("DMZ-WEB",),
-                    service=("HTTP",),
-                    action="accept",
-                ),
-            ),
-        ),
-        starter_config=_ORDERED_EXCEPTION_STARTER_CONFIG,
-        task_prompt="Move the restricted deny before the broad LAN HTTP allow so first-match order protects the exception.",
-        help_text="Required order: policy ID 10 DENY-RESTRICTED-HTTP must appear before policy ID 20 ALLOW-LAN-HTTP.",
-    ),
-    _exercise(
-        "custom-tcp-port",
-        "Custom TCP service",
-        "Define a custom TCP service on 8081, allow only that service, and explicitly deny ordinary HTTP.",
-        _CUSTOM_PORT_CONFIG,
-        (
-            _Case(
-                "custom-api-allowed",
-                "The custom service must allow TCP/8081.",
-                "10.231.31.10",
-                "10.231.32.10",
-                "port2",
-                "port3",
-                "tcp",
-                8081,
-                "allowed",
-                _policy(
-                    10,
-                    "ALLOW-LAN-API",
-                    srcaddr=("LAN-CLIENT",),
-                    dstaddr=("DMZ-API",),
-                    service=("LAB-API-TCP",),
-                    action="accept",
-                ),
-            ),
-            _Case(
-                "ordinary-http-denied",
-                "The same API object must explicitly deny TCP/80.",
-                "10.231.31.10",
-                "10.231.32.10",
-                "port2",
-                "port3",
-                "tcp",
-                80,
-                "blocked",
-                _policy(
-                    20,
-                    "DENY-LAN-HTTP",
-                    srcaddr=("LAN-CLIENT",),
-                    dstaddr=("DMZ-API",),
-                    service=("HTTP",),
-                    action="deny",
-                ),
-            ),
-        ),
-        starter_config=_CUSTOM_PORT_STARTER_CONFIG,
-        task_prompt="Repair the custom TCP service so the scoped API rule allows TCP/8081 and still explicitly denies HTTP.",
-        help_text="Required service: LAB-API-TCP must use tcp-portrange 8081. Keep the exercise within the FortiOS trial limit of three firewall policies.",
-    ),
-)
+def _scenario_case_pass(
+    case: _Case,
+    parsed: _Parsed,
+    reference: _Parsed,
+) -> bool:
+    actual_policy = next(
+        (policy for policy in parsed.policies if _matches(policy, case, parsed)),
+        None,
+    )
+    if case.expected_policy is None:
+        return actual_policy is None and case.expected_outcome == "blocked"
+    return (
+        actual_policy is not None
+        and actual_policy.action == case.expected_policy.action
+        and ((case.expected_outcome == "allowed" and actual_policy.action == "accept")
+             or (case.expected_outcome == "blocked" and actual_policy.action == "deny"))
+        and _rule_identity(actual_policy) == _rule_identity(case.expected_policy)
+        and _canonical_policy_scope(actual_policy, parsed)
+        == _canonical_policy_scope(case.expected_policy, reference)
+    )
 
+
+def _load_scenarios(scenario_dir: Path | None = None) -> tuple[_Exercise, ...]:
+    """Load contributor-authored scenarios from versioned JSON bundles."""
+
+    scenario_dir = scenario_dir or Path(
+        os.environ.get("FORTIGATE_SCENARIO_DIR", Path(__file__).resolve().parent / "scenarios")
+    ).resolve()
+    exercises: list[_Exercise] = []
+    seen_ids: set[str] = set()
+    scenario_paths = sorted(scenario_dir.glob("*/scenario.json"))
+    for path in scenario_paths:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if data.get("schema_version") != 1:
+            raise ValueError(f"{path.name}: schema_version must be 1")
+        exercise_id = data.get("id")
+        if not isinstance(exercise_id, str) or not re.fullmatch(r"[a-z0-9][a-z0-9-]+", exercise_id):
+            raise ValueError(f"{path.name}: id must be a lowercase kebab-case string")
+        if path.parent.name != exercise_id:
+            raise ValueError(f"{path.name}: directory name must match id {exercise_id!r}")
+        if exercise_id in seen_ids:
+            raise ValueError(f"duplicate scenario id {exercise_id!r}")
+        seen_ids.add(exercise_id)
+        fields = ("title", "description", "task_prompt", "help")
+        if any(not isinstance(data.get(field), str) or not data[field].strip() for field in fields):
+            raise ValueError(f"{path.name}: title and descriptions are required")
+        starter_path = path.parent / "starter.conf"
+        reference_path = path.parent / "reference.conf"
+        if starter_path.name != "starter.conf" or reference_path.name != "reference.conf":
+            raise ValueError(f"{path.name}: scenario snapshots must use fixed file names")
+        if not starter_path.is_file() or not reference_path.is_file():
+            raise ValueError(f"{path.name}: starter.conf and reference.conf are required")
+        reference = reference_path.read_text(encoding="utf-8").strip() + "\n"
+        starter = starter_path.read_text(encoding="utf-8").strip() + "\n"
+        parsed_reference = _parse_config(reference)
+        if parsed_reference.errors:
+            raise ValueError(f"{path.name}: reference config is invalid: {parsed_reference.errors}")
+        parsed_starter = _parse_config(starter)
+        if parsed_starter.errors:
+            raise ValueError(f"{path.name}: starter config is invalid: {parsed_starter.errors}")
+        reference_policies = {policy.policy_id: policy for policy in parsed_reference.policies}
+        cases = tuple(_case_from_data(item, reference_policies) for item in data.get("cases", []))
+        flows = tuple(_case_from_data(item, reference_policies) for item in data.get("flows", []))
+        if not cases:
+            raise ValueError(f"{path.name}: at least one graded case is required")
+        if len({case.case_id for case in (*cases, *flows)}) != len(cases) + len(flows):
+            raise ValueError(f"{path.name}: flow IDs must be unique")
+        for case in (*cases, *flows):
+            if case.expected_policy is None:
+                if case.expected_outcome != "blocked":
+                    raise ValueError(f"{path.name}: implicit flows must declare blocked")
+            elif case.expected_outcome != (
+                "allowed" if case.expected_policy.action == "accept" else "blocked"
+            ):
+                raise ValueError(f"{path.name}: expected outcome disagrees with reference policy")
+        all_reference_flows_pass = all(
+            _scenario_case_pass(case, parsed_reference, parsed_reference)
+            for case in (*cases, *flows)
+        )
+        if not all_reference_flows_pass:
+            raise ValueError(f"{path.name}: reference config does not satisfy its declared flows")
+        all_starter_flows_pass = all(
+            _scenario_case_pass(case, parsed_starter, parsed_reference)
+            for case in (*cases, *flows)
+        )
+        if all_starter_flows_pass:
+            raise ValueError(f"{path.name}: starter config already passes every declared flow")
+        exercises.append(_Exercise(
+            exercise_id=exercise_id,
+            title=data["title"],
+            description=data["description"],
+            config=reference,
+            starter_config=starter,
+            task_prompt=data["task_prompt"],
+            help=data["help"],
+            cases=cases,
+            flows=flows,
+        ))
+    if not exercises:
+        raise ValueError(f"no scenario bundles found in {scenario_dir}")
+    preferred_order = {
+        "scoped-http-allow": 0,
+        "ordered-exception": 1,
+        "custom-tcp-port": 2,
+    }
+    exercises.sort(key=lambda item: (preferred_order.get(item.exercise_id, 1000), item.exercise_id))
+    return tuple(exercises)
+
+
+def load_scenarios(scenario_dir: Path | None = None) -> tuple[_Exercise, ...]:
+    """Load and validate a scenario collection for contributor tooling."""
+
+    return _load_scenarios(scenario_dir)
+
+
+# The versioned scenario bundles are the source of the public catalog.
+_EXERCISES = _load_scenarios()
 _EXERCISE_BY_ID = {exercise.exercise_id: exercise for exercise in _EXERCISES}
 def catalog() -> list[dict[str, Any]]:
     """Return independent, JSON-serializable exercise definitions."""
@@ -1074,6 +904,7 @@ def catalog() -> list[dict[str, Any]]:
                 "task_prompt": exercise.task_prompt,
                 "help": exercise.help,
                 "firewall_policy_limit": 3,
+                "boundary_flows": [_case_public(case) for case in exercise.flows],
                 "supported_operations": [
                     "config firewall address / edit / set subnet / next / end",
                     "config firewall service custom / edit / set tcp-portrange / next / end",
@@ -1143,11 +974,18 @@ def grade(exercise_id: str, config_text: str) -> dict[str, Any]:
         ]
         return result
 
+    expected_parsed = _parse_config(exercise.config)
+    if expected_parsed.errors:
+        result["errors"].append({
+            "code": "invalid_reference",
+            "line": 0,
+            "message": "The bundled reference configuration is invalid.",
+        })
+        result["feedback"] = "The exercise reference is invalid and cannot be graded."
+        return result
+
     for case in exercise.cases:
-        actual_policy = next(
-            (policy for policy in parsed.policies if _matches(policy, case, parsed)),
-            None,
-        )
+        actual_policy = _matching_policy(case, parsed)
         actual_outcome = (
             "allowed"
             if actual_policy is not None and actual_policy.action == "accept"
@@ -1158,28 +996,44 @@ def grade(exercise_id: str, config_text: str) -> dict[str, Any]:
         expected_identity = _rule_identity(case.expected_policy)
         actual_identity = _rule_identity(actual_policy)
         identity_pass = actual_identity == expected_identity
+        expected_policy = case.expected_policy
         scope_pass = (
             actual_policy is not None
-            and _policy_signature(actual_policy) == _expected_signature(case)
+            and expected_policy is not None
+            and _canonical_policy_scope(actual_policy, parsed)
+            == _canonical_policy_scope(expected_policy, expected_parsed)
         )
-        case_pass = (
-            actual_outcome == case.expected_outcome
-            and identity_pass
-            and scope_pass
-        )
+        if expected_policy is None:
+            # A null expected policy is a deliberate implicit default-deny
+            # boundary. It passes only when no explicit rule matches; an
+            # explicit deny is still the wrong teaching outcome.
+            case_pass = actual_policy is None and case.expected_outcome == "blocked"
+        else:
+            case_pass = (
+                actual_outcome == case.expected_outcome
+                and identity_pass
+                and scope_pass
+            )
         if case_pass:
-            feedback = "Matched the expected first rule and exact scope."
+            feedback = (
+                "No explicit policy matched; the expected implicit default deny held."
+                if expected_policy is None
+                else "Matched the expected first rule and exact scope."
+            )
         elif actual_policy is None:
-            feedback = (
-                "No explicit policy matched; this is implicit default deny and "
-                "cannot satisfy an explicit-denial case."
-            )
+            feedback = "No explicit policy matched; this is implicit default deny, but the case expected a different decision."
         elif not identity_pass:
-            feedback = (
-                f"First matching policy is {actual_policy.policy_id} "
-                f"{actual_policy.name!r}; expected {case.expected_policy.policy_id} "
-                f"{case.expected_policy.name!r}. Check policy order and narrower exceptions."
-            )
+            if expected_policy is None:
+                feedback = (
+                    f"First matching policy is {actual_policy.policy_id} "
+                    f"{actual_policy.name!r}; expected implicit default deny."
+                )
+            else:
+                feedback = (
+                    f"First matching policy is {actual_policy.policy_id} "
+                    f"{actual_policy.name!r}; expected {case.expected_policy.policy_id} "
+                    f"{case.expected_policy.name!r}. Check policy order and narrower exceptions."
+                )
         elif not scope_pass:
             feedback = (
                 "The expected rule identity matched, but its scope differs. "
@@ -1206,9 +1060,49 @@ def grade(exercise_id: str, config_text: str) -> dict[str, Any]:
             }
         )
 
+    boundary_results: list[dict[str, Any]] = []
+    boundary_passed = 0
+    for boundary in exercise.flows:
+        actual_policy = _matching_policy(boundary, parsed)
+        actual = _flow_result(boundary, parsed)
+        expected = {
+            "outcome": boundary.expected_outcome,
+            "explicit": boundary.expected_policy is not None,
+            "rule_identity": _rule_identity(boundary.expected_policy),
+        }
+        expected_scope = _canonical_policy_scope(boundary.expected_policy, expected_parsed)
+        actual_scope = _canonical_policy_scope(actual_policy, parsed)
+        boundary_pass = (
+            ((boundary.expected_policy is None
+              and actual_policy is None
+              and boundary.expected_outcome == "blocked")
+             or (boundary.expected_policy is not None
+                 and actual["outcome"] == boundary.expected_outcome
+                 and _rule_identity(actual_policy) == _rule_identity(boundary.expected_policy)
+                 and actual_scope == expected_scope)))
+        if boundary_pass:
+            boundary_passed += 1
+        boundary_results.append({
+            **_case_public(boundary),
+            "expected": expected,
+            "actual": {
+                **actual,
+                "explicit": actual_policy is not None,
+                "policy": _policy_public(actual_policy),
+            },
+            "pass": boundary_pass,
+            "feedback": (
+                "Boundary flow retained the expected explicit or implicit decision."
+                if boundary_pass
+                else "Boundary flow changed. Check for an over-broad address, service, or appended policy."
+            ),
+        })
+    result["boundaries"] = boundary_results
     passed = sum(1 for case in result["cases"] if case["pass"])
     result["summary"]["passed"] = passed
-    result["pass"] = passed == len(exercise.cases)
+    result["summary"]["boundary_passed"] = boundary_passed
+    result["summary"]["boundary_total"] = len(boundary_results)
+    result["pass"] = passed == len(exercise.cases) and boundary_passed == len(boundary_results)
     result["feedback"] = (
         "All positive and explicit-negative cases passed."
         if result["pass"]
@@ -1217,4 +1111,138 @@ def grade(exercise_id: str, config_text: str) -> dict[str, Any]:
     return result
 
 
-__all__ = ["catalog", "grade"]
+def _flow_result(case: _Case, parsed: _Parsed) -> dict[str, Any]:
+    actual_policy = _matching_policy(case, parsed)
+    outcome = (
+        "allowed"
+        if actual_policy is not None and actual_policy.action == "accept"
+        else "blocked"
+        if actual_policy is not None and actual_policy.action == "deny"
+        else "implicit-deny"
+    )
+    return {
+        "outcome": outcome,
+        "rule_identity": _rule_identity(actual_policy),
+    }
+
+
+def _matching_policy(case: _Case, parsed: _Parsed) -> _Policy | None:
+    return next(
+        (policy for policy in parsed.policies if _matches(policy, case, parsed)),
+        None,
+    )
+
+
+def _compare_error(side: str, error: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "side": side,
+        "code": str(error.get("code", "invalid_config")),
+        "line": int(error.get("line", 0)),
+        "message": str(error.get("message", "Configuration is invalid.")),
+    }
+
+
+def _canonical_objects(parsed: _Parsed, kind: str) -> dict[str, Any]:
+    if kind == "address":
+        return {name: str(value.network) for name, value in parsed.addresses.items()}
+    return {
+        name: [[first, last] for first, last in value.tcp_ports]
+        for name, value in parsed.services.items()
+    }
+
+
+def _canonical_policies(parsed: _Parsed) -> dict[str, Any]:
+    return {
+        str(policy.policy_id): {
+            "sequence": sequence,
+            "scope": _canonical_policy_scope(policy, parsed),
+        }
+        for sequence, policy in enumerate(parsed.policies)
+    }
+
+
+def compare(exercise_id: str, before: str, after: str) -> dict[str, Any]:
+    """Compare two configs using every graded and boundary flow in a scenario."""
+
+    result: dict[str, Any] = {
+        "schema_version": 1,
+        "exercise_id": str(exercise_id),
+        "errors": [],
+        "flows": [],
+        "scope_changes": [],
+        "summary": {"total": 0, "changed": 0},
+    }
+    exercise = _EXERCISE_BY_ID.get(exercise_id)
+    if exercise is None:
+        result["errors"].append({
+            "side": "request",
+            "code": "unknown_exercise",
+            "line": 0,
+            "message": f"Unknown exercise {exercise_id!r}.",
+        })
+        return result
+    if not isinstance(before, str) or not isinstance(after, str):
+        result["errors"].append({
+            "side": "request",
+            "code": "invalid_input",
+            "line": 0,
+            "message": "before and after must be strings containing CLI configuration.",
+        })
+        return result
+    before_parsed = _parse_config(before)
+    after_parsed = _parse_config(after)
+    for error in before_parsed.errors:
+        result["errors"].append(_compare_error("before", error))
+    for error in after_parsed.errors:
+        result["errors"].append(_compare_error("after", error))
+    if result["errors"]:
+        return result
+
+    flows = (*exercise.cases, *exercise.flows)
+    result["summary"]["total"] = len(flows)
+    for case in flows:
+        before_flow = _flow_result(case, before_parsed)
+        after_flow = _flow_result(case, after_parsed)
+        changed = before_flow != after_flow
+        result["flows"].append({
+            "id": case.case_id,
+            "source": case.source,
+            "destination": case.destination,
+            "destination_port": case.destination_port,
+            "description": case.description,
+            "before": before_flow,
+            "after": after_flow,
+            "changed": changed,
+        })
+        if changed:
+            result["summary"]["changed"] += 1
+
+    for kind in ("address", "service"):
+        before_objects = _canonical_objects(before_parsed, kind)
+        after_objects = _canonical_objects(after_parsed, kind)
+        for name in sorted(set(before_objects) | set(after_objects)):
+            old = before_objects.get(name)
+            new = after_objects.get(name)
+            if old != new:
+                result["scope_changes"].append({
+                    "kind": kind,
+                    "name": name,
+                    "before": old,
+                    "after": new,
+                })
+    before_policies = _canonical_policies(before_parsed)
+    after_policies = _canonical_policies(after_parsed)
+    for policy_id in sorted(set(before_policies) | set(after_policies), key=int):
+        old = before_policies.get(policy_id)
+        new = after_policies.get(policy_id)
+        if old != new:
+            result["scope_changes"].append({
+                "kind": "policy",
+                "name": policy_id,
+                "before": old,
+                "after": new,
+            })
+    return result
+
+
+__all__ = ["catalog", "compare", "grade"]
