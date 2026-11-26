@@ -29,6 +29,10 @@ jobs:
           bash -n training/start-company.sh
           node --check training/static/app.js
           docker compose -f training/compose.yaml config --quiet
+          bash deploy/scripts/verify-forwarding.sh \
+            --probes examples/forwarding/fortios-7.6.8/probes.jsonl \
+            --logs examples/forwarding/fortios-7.6.8/forward-traffic.json \
+            --output "$RUNNER_TEMP/forwarding-report.json"
       - name: Run the packaged worksheet over HTTP
         env:
           WORKSHEET_PORT: 28846

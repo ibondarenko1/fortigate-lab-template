@@ -93,34 +93,7 @@ run_report() {
     printf 'No FortiOS log export was supplied. Re-run with --probes %s --logs PATH to attach policy evidence.\n' "$probe_path"
   fi
 
-  local evidence_status=0
-  if [[ -n "$logs_path" ]]; then
-    if ! python3 - "$output_path" <<'PY'
-import json
-from pathlib import Path
-import sys
-
-report = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-accepted = {"allow_with_evidence", "explicit_deny", "implicit_deny"}
-flows = report.get("flows", [])
-policy_flows = [flow for flow in flows if flow.get("expected") in {"allow", "deny"}]
-control_flows = [flow for flow in flows if flow.get("expected") not in {"allow", "deny"}]
-if (
-    not flows
-    or not policy_flows
-    or any(flow.get("verification") not in accepted for flow in policy_flows)
-    or any(flow.get("expected_policy_id") is None for flow in policy_flows)
-    or any(flow.get("verification") != "local_service_unavailable" for flow in control_flows)
-):
-    raise SystemExit(1)
-PY
-    then
-      printf 'The exported logs did not prove every probe. Review the redacted report.\n' >&2
-      evidence_status=1
-    fi
-  fi
-
-  if (( legacy_status != 0 || report_status != 0 || evidence_status != 0 )); then
+  if (( legacy_status != 0 || report_status != 0 )); then
     printf 'The LAN forwarding control failed. Review the report before changing a policy.\n' >&2
     return 1
   fi

@@ -121,6 +121,14 @@ def test_conflicting_nearby_logs_are_ambiguous(tmp_path: Path):
     assert report["flows"][0]["log"] is None
 
 
+def test_reachable_listener_cannot_prove_a_stopped_service_control(tmp_path: Path):
+    probes = tmp_path / "probes.jsonl"
+    item = _probe("control", 80, 41800, result="connected", local_service="stopped")
+    _write_json(probes, [{**item, "expected": "unknown"}])
+    report = build_report(probes, None)
+    assert report["flows"][0]["verification"] == "service_check_mismatch"
+
+
 def test_http_and_expected_policy_controls_block_false_acceptance(tmp_path: Path):
     probes = tmp_path / "probes.jsonl"
     logs = tmp_path / "logs.jsonl"

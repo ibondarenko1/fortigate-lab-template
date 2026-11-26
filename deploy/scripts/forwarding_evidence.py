@@ -338,7 +338,7 @@ def _verification(probe: Mapping[str, Any], log: Mapping[str, Any] | None, ambig
     if probe["result"] == "connected" and (probe.get("http_status") != 200 or probe.get("body_match") is not True):
         return "probe_http_mismatch"
     if probe["local_service"] in {"stopped", "unavailable"}:
-        return "local_service_unavailable"
+        return "service_check_mismatch" if probe["result"] == "connected" else "local_service_unavailable"
     expected = probe.get("expected")
     if expected == "allow" and probe["result"] != "connected":
         return "probe_failed"
@@ -347,8 +347,6 @@ def _verification(probe: Mapping[str, Any], log: Mapping[str, Any] | None, ambig
     if ambiguous:
         return "ambiguous_forward_log"
     if log is None:
-        if probe["local_service"] in {"stopped", "unavailable"}:
-            return "local_service_unavailable"
         return "missing_forward_log"
     expected_policy_id = probe.get("expected_policy_id")
     if expected_policy_id is not None and log["policy_id"] != expected_policy_id:
