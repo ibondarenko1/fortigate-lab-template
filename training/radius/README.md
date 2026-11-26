@@ -37,20 +37,10 @@ Select **Test User Credentials** and enter `labco.radius.student` with the passw
 
 ## Disposable verification
 
-The optional `RADIUS_SELFTEST=true` additionally permits a loopback RADIUS client. Leave it unset for the normal DMZ fixture. The self-test prints only pass/fail and validates response authenticators. This invocation generates fresh throwaway secrets inside tmpfs and connects only through the container's loopback interface.
+From the repository root, build and run the same isolated check used by CI. It waits for FreeRADIUS to accept requests, authenticates the synthetic student, checks two rejected logins and verifies each response authenticator. Generated credentials exist only on tmpfs. The container uses its own loopback interface and is removed on exit.
 
 ```sh
-docker build -t local/radius-fixture:test training/radius
-docker run -d --name radius-fixture-selftest --network none --read-only \
-  --cap-drop ALL --cap-add CHOWN --cap-add SETUID --cap-add SETGID \
-  --security-opt no-new-privileges \
-  --tmpfs /run/radius:mode=0700 --tmpfs /run/secrets:mode=0700 --tmpfs /tmp \
-  -e RADIUS_CLIENT_IP=10.231.32.1 -e RADIUS_SELFTEST=true \
-  --entrypoint python3 local/radius-fixture:test \
-  /opt/radius/selftest.py --bootstrap-disposable
-docker exec radius-fixture-selftest python3 /opt/radius/selftest.py
-docker stop radius-fixture-selftest
-docker rm radius-fixture-selftest
+bash training/radius/run-selftest.sh
 ```
 
 Verified locally on 2026-11-19 with Debian package `freeradius 3.2.1+dfsg-4+deb12u1`. Positive PAP returned Access-Accept, an incorrect password returned Access-Reject, and an unknown username returned Access-Reject. Base image is pinned in the Dockerfile. Debian packages are resolved from signed Bookworm repositories at build time.

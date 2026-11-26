@@ -1,0 +1,14 @@
+provider: clab
+addressing:
+  lan: {ipv4: 10.231.0.0/16, prefix: 24}
+
+nodes:
+  client: {device: linux}
+  fw: {device: fortios, loopback: false}
+  web: {device: linux}
+
+links:
+  - client: {ipv4: 10.231.31.10/24}
+    fw: {ipv4: 10.231.31.1/24}
+  - fw: {ipv4: 10.231.32.1/24}
+    web: {ipv4: 10.231.32.10/24}
